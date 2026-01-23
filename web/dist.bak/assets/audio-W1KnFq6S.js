@@ -1,0 +1,1 @@
+import{a}from"./request-DqID6P9m.js";const o="/api/v1",e={extractAudio:async t=>(await a.post(`${o}/audio/extract`,{video_url:t})).data,batchExtractAudio:async t=>(await a.post(`${o}/audio/extract/batch`,{video_urls:t})).data};export{e as audioAPI};

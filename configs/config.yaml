@@ -1,0 +1,25 @@
+ai:
+    default_image_provider: openai
+    default_text_provider: openai
+    default_video_provider: doubao
+app:
+    debug: true
+    language: zh
+    name: Huobao Drama API
+    version: 1.0.0
+database:
+    max_idle: 10
+    max_open: 100
+    path: ./data/drama_generator.db
+    type: sqlite
+server:
+    cors_origins:
+        - http://localhost:3012
+    host: 0.0.0.0
+    port: 5678
+    read_timeout: 600
+    write_timeout: 600
+storage:
+    base_url: http://localhost:5678/static
+    local_path: ./data/storage
+    type: local

@@ -1,0 +1,29 @@
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import './assets/styles/element/index.scss'
+
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+
+import App from './App.vue'
+import router from './router'
+import i18n from './locales'
+import './assets/styles/main.css'
+
+// Apply dark theme by default
+// 默认应用深色模式
+document.documentElement.classList.add('dark')
+
+const app = createApp(App)
+
+app.use(createPinia())
+app.use(router)
+app.use(i18n)
+app.use(ElementPlus)
+
+for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, component)
+}
+
+app.mount('#app')

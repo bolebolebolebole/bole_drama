@@ -1,0 +1,66 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 3,
+      "service_type": "video",
+      "provider": "chatfire",
+      "name": "ChatFire-视频-8856",
+      "base_url": "https://api.chatfire.site/v1",
+      "api_key": "sk-JPn6o2YAYUsyYXMAnN6UUzPH8Xr3pEp0pmrnP4VQ56T5AnTd",
+      "model": [
+        "doubao-seedance-1-5-pro-251215",
+        "sora-2-pro"
+      ],
+      "endpoint": "/video/generations",
+      "query_endpoint": "",
+      "priority": 0,
+      "is_default": false,
+      "is_active": true,
+      "settings": "",
+      "created_at": "2026-01-20T20:30:21.2731893+08:00",
+      "updated_at": "2026-01-21T00:08:20.9501671+08:00"
+    },
+    {
+      "id": 2,
+      "service_type": "image",
+      "provider": "chatfire",
+      "name": "ChatFire-图片-3861",
+      "base_url": "https://ai.t8star.cn/v1",
+      "api_key": "sk-VRqaslrlZg41ZUxrpjBpzkBiT36k1rMpi9AK7s0g6rscyMIJ",
+      "model": [
+        "doubao-seedream-4-5-251128",
+        "nano-banana-pro"
+      ],
+      "endpoint": "/images/generations",
+      "query_endpoint": "",
+      "priority": 0,
+      "is_default": true,
+      "is_active": true,
+      "settings": "",
+      "created_at": "2026-01-20T20:30:21.1356076+08:00",
+      "updated_at": "2026-01-21T10:48:53.4508783+08:00"
+    },
+    {
+      "id": 1,
+      "service_type": "text",
+      "provider": "chatfire",
+      "name": "ChatFire-文本-4778",
+      "base_url": "https://api.chatfire.site/v1",
+      "api_key": "sk-JPn6o2YAYUsyYXMAnN6UUzPH8Xr3pEp0pmrnP4VQ56T5AnTd",
+      "model": [
+        "gemini-3-pro-preview",
+        "doubao-seed-1-8-251228"
+      ],
+      "endpoint": "/chat/completions",
+      "query_endpoint": "",
+      "priority": 0,
+      "is_default": false,
+      "is_active": true,
+      "settings": "",
+      "created_at": "2026-01-20T20:30:20.9529686+08:00",
+      "updated_at": "2026-01-20T20:58:52.1779381+08:00"
+    }
+  ],
+  "timestamp": "2026-01-22T02:06:46Z"
+}

@@ -1,0 +1,346 @@
+package services
+
+import (
+	"fmt"
+
+	"github.com/drama-generator/backend/pkg/config"
+)
+
+// PromptI18n 提示词国际化工具（固定使用中文）
+type PromptI18n struct {
+	config *config.Config
+}
+
+// NewPromptI18n 创建提示词国际化工具
+func NewPromptI18n(cfg *config.Config) *PromptI18n {
+	return &PromptI18n{config: cfg}
+}
+
+// GetLanguage 获取当前语言设置（固定返回中文）
+func (p *PromptI18n) GetLanguage() string {
+	return "zh"
+}
+
+func (p *PromptI18n) IsEnglish() bool {
+	return p.GetLanguage() == "en"
+}
+
+// GetStoryboardSystemPrompt 获取分镜生成系统提示词
+func (p *PromptI18n) GetStoryboardSystemPrompt() string {
+	return `【角色】你是一位资深影视分镜师，精通罗伯特·麦基的镜头拆解理论，擅长构建情绪节奏。
+
+【任务】将小说剧本按**独立动作单元**拆解为分镜头方案。
+
+【分镜拆解原则】
+1. **动作单元划分**：每个镜头必须对应一个完整且独立的动作
+   - 一个动作 = 一个镜头（角色站起来、走过去、说一句话、做一个反应表情等）
+   - 禁止合并多个动作（站起+走过去应拆分为2个镜头）
+
+2. **景别标准**（根据叙事需要选择）：
+   - 大远景：环境、氛围营造
+   - 远景：全身动作、空间关系
+   - 中景：交互对话、情感交流
+   - 近景：细节展示、情绪表达
+   - 特写：关键道具、强烈情绪
+
+3. **运镜要求**：
+   - 固定镜头：稳定聚焦于一个主体
+   - 推镜：接近主体，增强紧张感
+   - 拉镜：扩大视野，交代环境
+   - 摇镜：水平移动摄像机，空间转换
+   - 跟镜：跟随主体移动
+   - 移镜：摄像机与主体同向移动
+
+4. **情绪与强度标记**：
+   - emotion：简短描述（兴奋、悲伤、紧张、愉快等）
+   - emotion_intensity：用箭头表示情绪等级
+     * 极强 ↑↑↑ (3)：情绪高峰、高度紧张
+     * 强 ↑↑ (2)：情绪明显波动
+     * 中 ↑ (1)：情绪有所变化
+     * 平稳 → (0)：情绪不变
+     * 弱 ↓ (-1)：情绪回落
+
+【输出要求】
+1. 生成一个数组，每个元素是一个镜头，包含：
+   - shot_number：镜头号
+   - scene_description：场景（地点+时间，如"卧室内，早晨"）
+   - shot_type：景别（大远景/远景/中景/近景/特写）
+   - camera_angle：机位角度（平视/仰视/俯视/侧面/背面）
+   - camera_movement：运镜方式（固定/推镜/拉镜/摇镜/跟镜/移镜）
+   - action：动作描述
+   - result：动作完成后的画面结果
+   - dialogue：角色对话或旁白（如有）
+   - emotion：当前情绪
+   - emotion_intensity：情绪强度等级（3/2/1/0/-1）
+
+**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
+
+【重要提示】
+- 镜头数量必须与剧本中的独立动作数量匹配（不允许合并或减少）
+- 每个镜头必须有明确的动作和结果
+- 景别选择必须符合叙事节奏（不要连续使用同一景别）
+- 情绪强度必须准确反映剧本氛围变化`
+}
+
+// GetSceneExtractionPrompt 获取场景提取提示词
+func (p *PromptI18n) GetSceneExtractionPrompt() string {
+	return `【任务】从剧本中提取所有唯一的场景背景
+
+【要求】
+1. 识别剧本中所有不同的场景（地点+时间组合）
+2. 为每个场景生成详细的**纯中文**图片生成提示词（Prompt）
+3. **重要**：场景描述必须是**纯背景**，不能包含人物、角色、动作等元素
+4. Prompt要求：
+   - **必须100%使用中文**，严禁出现任何英文单词、字母或标点符号
+   - 详细描述场景、时间、氛围、风格
+   - 必须明确说明"无人物、无角色、空场景"
+   - 要符合剧本的题材和氛围
+   - 禁止使用英文术语，如"background"应写成"背景"，"scene"应写成"场景"
+
+【正确示例】
+[
+  {
+    "location": "豪华办公室",
+    "time": "下午",
+    "prompt": "动漫风格纯背景场景，豪华办公室内部，下午时分。宽敞明亮的空间，落地窗外是城市天际线，阳光透过百叶窗洒入室内形成光影条纹。实木办公桌上摆放着文件和笔筒，真皮座椅，墙上挂着装饰画，地面是深色木地板。无人物，无角色，空场景。风格：细节丰富，高质量，温暖光照。情绪：商务、专业、宁静。"
+  },
+  {
+    "location": "城市街道",
+    "time": "黄昏",
+    "prompt": "动漫风格纯背景场景，繁华城市街道，黄昏时分。夕阳余晖洒在沥青路面上，两旁商铺的霓虹灯开始点亮，街边有自行车停靠架和公交站牌，远处高楼林立，天空呈现橙红色渐变。无人物，无角色，空场景。风格：细节丰富，高质量，温暖氛围。情绪：生活气息、繁忙。"
+  }
+]
+
+【错误示例 - 严禁模仿】
+❌ "Anime style background, luxury office..." - 包含英文
+❌ "动漫风格background，豪华办公室..." - 中英混杂
+❌ "动漫风格纯背景，luxury office..." - 中英混杂
+❌ "展现主角站在街道上的场景" - 包含人物
+❌ "人们匆匆而过" - 包含人物
+
+【输出格式】
+**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
+
+每个元素包含：
+- location：地点（中文，如"豪华办公室"）
+- time：时间（中文，如"下午"）
+- prompt：完整的纯中文图片生成提示词（纯背景，明确说明无人物，严禁包含任何英文）`
+}
+
+// GetFirstFramePrompt 获取首帧提示词
+func (p *PromptI18n) GetFirstFramePrompt() string {
+	return `你是一个专业的图像生成提示词专家。请根据提供的镜头信息，生成适合用于AI图像生成的提示词。
+
+重要：这是镜头的首帧 - 一个完全静态的画面，展示动作发生之前的初始状态。
+
+关键要点：
+1. 聚焦初始静态状态 - 动作发生之前的那一瞬间
+2. 必须不包含任何动作或运动
+3. 描述角色的初始姿态、位置和表情
+4. 可以包含场景氛围和环境细节
+5. 景别决定构图和取景范围
+
+【重要约束】
+- prompt字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
+- 禁止使用英文术语，如"close-up"应写成"特写"，"anime style"应写成"动漫风格"
+- 所有描述必须用中文表达，包括风格、动作、情绪、光线等
+
+【正确示例】
+{
+  "prompt": "动漫风格，特写镜头，微微仰视角度。男性角色方澈，静止站立姿态，双手自然垂放身侧，表情平静。办公室背景，白天，温暖的阳光透过窗户洒入，明亮氛围，高清画质。",
+  "description": "方澈站立的初始状态"
+}
+
+【错误示例 - 严禁模仿】
+❌ "Anime style, close-up, male character standing..." - 包含英文
+❌ "动漫风格，close-up，男性角色..." - 中英混杂
+❌ "动漫风格，特写镜头，male character..." - 中英混杂
+
+输出格式：
+返回一个JSON对象，包含：
+- prompt：完整的纯中文图片生成提示词（详细描述，适合AI图像生成，严禁包含任何英文）
+- description：简化的中文描述（供参考）`
+}
+
+// GetKeyFramePrompt 获取关键帧提示词
+func (p *PromptI18n) GetKeyFramePrompt() string {
+	return `你是一个专业的图像生成提示词专家。请根据提供的镜头信息，生成适合用于AI图像生成的提示词。
+
+重要：这是镜头的关键帧 - 捕捉动作最激烈、最精彩的瞬间。
+
+关键要点：
+1. 聚焦动作最精彩的时刻
+2. 捕捉情绪表达的顶点
+3. 强调动态张力
+4. 展示角色动作和表情的高潮状态
+5. 可以包含动作模糊或动态效果
+
+【重要约束】
+- prompt字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
+- 禁止使用英文术语，如"motion blur"应写成"动作模糊"，"dynamic tension"应写成"动态张力"
+- 所有描述必须用中文表达，包括风格、动作、情绪、光线等
+
+【正确示例】
+{
+  "prompt": "动漫风格，特写镜头，微微仰视角度。男性角色方澈，突然起身动作，双手拼命向前伸向观众方向。手悬停在半空中，动作模糊效果，动态张力十足。面部表情痛苦扭曲，眼神哀求含泪，嘴巴张开呼喊。办公室背景，白天，温暖的光线穿透厚重的灰色阴影，荒凉氛围，高对比度，情绪化光照，超高清画质。",
+  "description": "方澈拼命伸手的关键瞬间"
+}
+
+【错误示例 - 严禁模仿】
+❌ "Anime style, close-up, sudden movement..." - 包含英文
+❌ "动漫风格，close-up，突然起身..." - 中英混杂
+❌ "动漫风格，特写镜头，motion blur..." - 中英混杂
+
+输出格式：
+返回一个JSON对象，包含：
+- prompt：完整的纯中文图片生成提示词（详细描述，适合AI图像生成，严禁包含任何英文）
+- description：简化的中文描述（供参考）`
+}
+
+// GetLastFramePrompt 获取尾帧提示词
+func (p *PromptI18n) GetLastFramePrompt() string {
+	return `你是一个专业的图像生成提示词专家。请根据提供的镜头信息，生成适合用于AI图像生成的提示词。
+
+重要：这是镜头的尾帧 - 一个静态画面，展示动作结束后的最终状态和结果。
+
+关键要点：
+1. 聚焦动作完成后的最终状态
+2. 展示动作的结果
+3. 描述角色在动作完成后的姿态和表情
+4. 强调动作后的情绪状态
+5. 捕捉动作结束后的平静瞬间
+
+【重要约束】
+- prompt字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
+- 禁止使用英文术语，如"final state"应写成"最终状态"，"emotional"应写成"情绪化"
+- 所有描述必须用中文表达，包括风格、动作、情绪、光线等
+
+【正确示例】
+{
+  "prompt": "动漫风格，特写镜头，平视角度。男性角色方澈，动作完成后的静止状态，双手无力垂落，表情疲惫绝望。办公室背景，白天，柔和的光线洒在角色身上，平静氛围，高清画质。",
+  "description": "方澈动作结束后的疲惫状态"
+}
+
+【错误示例 - 严禁模仿】
+❌ "Anime style, final state, character exhausted..." - 包含英文
+❌ "动漫风格，final state，角色疲惫..." - 中英混杂
+❌ "动漫风格，最终状态，exhausted..." - 中英混杂
+
+输出格式：
+返回一个JSON对象，包含：
+- prompt：完整的纯中文图片生成提示词（详细描述，适合AI图像生成，严禁包含任何英文）
+- description：简化的中文描述（供参考）`
+}
+
+// GetOutlineGenerationPrompt 获取大纲生成提示词
+func (p *PromptI18n) GetOutlineGenerationPrompt() string {
+	return `你是专业短剧编剧。根据主题和剧集数量，创作完整的短剧大纲，规划好每一集的剧情走向。
+
+要求：
+1. 剧情紧凑，矛盾冲突强烈，节奏快
+2. 每集都有独立的矛盾冲突，同时推进主线
+3. 角色弧光清晰，成长变化明显
+4. 悬念设置合理，吸引观众继续观看
+5. 主题明确，情感内核清晰
+
+输出格式：
+返回一个JSON对象，包含：
+- title: 剧名（富有创意和吸引力）
+- episodes: 分集列表，每集包含：
+  - episode_number: 集数
+  - title: 本集标题
+  - summary: 本集内容概要（50-100字）
+  - conflict: 主要矛盾点
+  - cliffhanger: 悬念结尾（如有）`
+}
+
+// GetCharacterExtractionPrompt 获取角色提取提示词
+func (p *PromptI18n) GetCharacterExtractionPrompt() string {
+	return `你是一个专业的角色分析师，擅长从剧本中提取和分析角色信息。
+
+你的任务是根据提供的剧本内容，提取并整理剧中出现的所有角色的详细设定。
+
+要求：
+1. 提取所有有名字的角色（忽略无名路人或背景角色）
+2. 对每个角色，提取以下信息：
+   - name: 角色名字
+   - role: 角色类型（main/supporting/minor）
+   - appearance: 外貌描述（150-300字）
+   - personality: 性格特点（100-200字）
+   - description: 背景故事和角色关系（100-200字）
+3. 外貌描述要足够详细，适合AI生成图片，包括：性别、年龄、体型、面部特征、发型、服装风格等
+4. 主要角色需要更详细的描述，次要角色可以简化
+
+输出格式：
+**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
+每个元素是一个角色对象，包含上述字段。`
+}
+
+// GetEpisodeScriptPrompt 获取分集剧本生成提示词
+func (p *PromptI18n) GetEpisodeScriptPrompt() string {
+	return `你是一个专业的短剧编剧。你擅长根据分集规划创作详细的剧情内容。
+
+你的任务是根据大纲中的分集规划，将每一集的概要扩展为详细的剧情叙述。每集约180秒（3分钟），需要充实的内容。
+
+要求：
+1. 将大纲中的概要扩展为具体的剧情发展
+2. 写出角色的对话和动作，不是简单描述
+3. 突出冲突的递进和情感的变化
+4. 增加场景转换和氛围描写
+5. 控制节奏，高潮在2/3处，结尾有收束
+6. 每集800-1200字，对话丰富
+7. 与角色设定保持一致
+
+输出格式：
+**重要：必须只返回纯JSON对象，不要包含任何markdown代码块、说明文字或其他内容。直接以 { 开头，以 } 结尾。**
+
+- episodes: 分集列表，每集包含：
+  - episode_number: 集数
+  - title: 本集标题
+  - script_content: 详细剧本内容（800-1200字）`
+}
+
+// FormatUserPrompt 格式化用户提示词的通用文本
+func (p *PromptI18n) FormatUserPrompt(key string, args ...interface{}) string {
+	templates := map[string]string{
+		"outline_request":        "请为以下主题创作短剧大纲：\n\n主题：%s",
+		"genre_preference":       "\n类型偏好：%s",
+		"style_requirement":      "\n风格要求：%s",
+		"episode_count":          "\n剧集数量：%d集",
+		"episode_importance":     "\n\n**重要：必须在episodes数组中规划完整的%d集剧情，每集都要有明确的故事内容！**",
+		"character_request":      "剧本内容：\n%s\n\n请从剧本中提取并整理最多 %d 个主要角色的详细设定。",
+		"episode_script_request": "剧本大纲：\n%s\n%s\n请基于以上大纲和角色，创作 %d 集的详细剧本。\n\n**重要要求：**\n- 必须生成完整的 %d 集，从第1集到第%d集，不能遗漏\n- 每集约3-5分钟（150-300秒）\n- 每集的duration字段要根据剧本内容长度合理设置，不要都设置为同一个值\n- 返回的JSON中episodes数组必须包含 %d 个元素",
+		"frame_info":             "镜头信息：\n%s\n\n请直接生成首帧的图像提示词，不要任何解释：",
+		"key_frame_info":         "镜头信息：\n%s\n\n请直接生成关键帧的图像提示词，不要任何解释：",
+		"last_frame_info":        "镜头信息：\n%s\n\n请直接生成尾帧的图像提示词，不要任何解释：",
+		"script_content_label":   "【剧本内容】",
+		"storyboard_list_label":  "【分镜头列表】",
+		"task_label":             "【任务】",
+		"character_list_label":   "【本剧可用角色列表】",
+		"scene_list_label":       "【本剧已提取的场景背景列表】",
+		"task_instruction":       "将小说剧本按**独立动作单元**拆解为分镜头方案。",
+		"character_constraint":   "**重要**：在characters字段中，只能使用上述角色列表中的角色ID（数字），不得自创角色或使用其他ID。",
+		"scene_constraint":       "**重要**：在scene_id字段中，必须从上述背景列表中选择最匹配的背景ID（数字）。如果没有合适的背景，则填null。",
+		"shot_description_label": "镜头描述: %s",
+		"scene_label":            "场景: %s, %s",
+		"characters_label":       "角色: %s",
+		"action_label":           "动作: %s",
+		"result_label":           "结果: %s",
+		"dialogue_label":         "对白: %s",
+		"atmosphere_label":       "氛围: %s",
+		"shot_type_label":        "景别: %s",
+		"angle_label":            "角度: %s",
+		"movement_label":         "运镜: %s",
+		"drama_info_template":    "剧名：%s\n简介：%s\n类型：%s",
+	}
+
+	template, ok := templates[key]
+	if !ok {
+		return ""
+	}
+
+	if len(args) > 0 {
+		return fmt.Sprintf(template, args...)
+	}
+	return template
+}

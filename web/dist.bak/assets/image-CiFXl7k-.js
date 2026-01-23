@@ -1,0 +1,1 @@
+import{r as t}from"./request-DqID6P9m.js";const a={generateImage(e){return t.post("/images",e)},generateForScene(e){return t.post(`/images/scene/${e}`)},batchGenerateForEpisode(e){return t.post(`/images/episode/${e}/batch`)},getImage(e){return t.get(`/images/${e}`)},listImages(e){return t.get("/images",{params:e})},deleteImage(e){return t.delete(`/images/${e}`)}};export{a as i};
