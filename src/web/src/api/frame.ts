@@ -26,7 +26,6 @@ export interface FramePromptResponse {
 export interface GenerateFramePromptRequest {
   frame_type: FrameType
   panel_count?: number // 分镜板格数，默认3
-  style?: string // 提示词风格（可选）
 }
 
 /**
@@ -42,22 +41,22 @@ export function generateFramePrompt(
 /**
  * 生成首帧提示词
  */
-export function generateFirstFrame(storyboardId: number, style?: string): Promise<FramePromptResponse> {
-  return generateFramePrompt(storyboardId, { frame_type: 'first', style })
+export function generateFirstFrame(storyboardId: number): Promise<FramePromptResponse> {
+  return generateFramePrompt(storyboardId, { frame_type: 'first' })
 }
 
 /**
  * 生成关键帧提示词
  */
-export function generateKeyFrame(storyboardId: number, style?: string): Promise<FramePromptResponse> {
-  return generateFramePrompt(storyboardId, { frame_type: 'key', style })
+export function generateKeyFrame(storyboardId: number): Promise<FramePromptResponse> {
+  return generateFramePrompt(storyboardId, { frame_type: 'key' })
 }
 
 /**
  * 生成尾帧提示词
  */
-export function generateLastFrame(storyboardId: number, style?: string): Promise<FramePromptResponse> {
-  return generateFramePrompt(storyboardId, { frame_type: 'last', style })
+export function generateLastFrame(storyboardId: number): Promise<FramePromptResponse> {
+  return generateFramePrompt(storyboardId, { frame_type: 'last' })
 }
 
 /**
@@ -65,21 +64,19 @@ export function generateLastFrame(storyboardId: number, style?: string): Promise
  */
 export function generatePanelFrames(
   storyboardId: number,
-  panelCount: number = 3,
-  style?: string
+  panelCount: number = 3
 ): Promise<FramePromptResponse> {
   return generateFramePrompt(storyboardId, {
     frame_type: 'panel',
-    panel_count: panelCount,
-    style
+    panel_count: panelCount
   })
 }
 
 /**
  * 生成动作序列（5格）
  */
-export function generateActionSequence(storyboardId: number, style?: string): Promise<FramePromptResponse> {
-  return generateFramePrompt(storyboardId, { frame_type: 'action', style })
+export function generateActionSequence(storyboardId: number): Promise<FramePromptResponse> {
+  return generateFramePrompt(storyboardId, { frame_type: 'action' })
 }
 
 // 帧提示词记录（从数据库查询）

@@ -5,6 +5,7 @@ export interface Drama {
   description?: string
   genre?: string
   style?: string
+  aspect_ratio?: string
   total_episodes: number
   total_duration: number
   total_scenes?: number
@@ -117,6 +118,8 @@ export interface CreateDramaRequest {
   description?: string
   genre?: string
   tags?: string
+  style?: 'realistic' | 'anime'
+  aspect_ratio?: '16:9' | '9:16'
 }
 
 export interface UpdateDramaRequest {

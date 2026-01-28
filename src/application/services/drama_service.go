@@ -29,6 +29,8 @@ type CreateDramaRequest struct {
 	Description string `json:"description"`
 	Genre       string `json:"genre"`
 	Tags        string `json:"tags"`
+	Style       string `json:"style" binding:"omitempty,oneof=realistic anime"`
+	AspectRatio string `json:"aspect_ratio" binding:"omitempty,oneof=16:9 9:16"`
 }
 
 type UpdateDramaRequest struct {
@@ -48,9 +50,20 @@ type DramaListQuery struct {
 }
 
 func (s *DramaService) CreateDrama(req *CreateDramaRequest) (*models.Drama, error) {
+	style := req.Style
+	if style == "" {
+		style = "realistic"
+	}
+	aspectRatio := req.AspectRatio
+	if aspectRatio == "" {
+		aspectRatio = "9:16"
+	}
+
 	drama := &models.Drama{
-		Title:  req.Title,
-		Status: "draft",
+		Title:       req.Title,
+		Status:      "draft",
+		Style:       style,
+		AspectRatio: aspectRatio,
 	}
 
 	if req.Description != "" {

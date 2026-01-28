@@ -77,6 +77,14 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 		return nil, fmt.Errorf("storyboard not found: %w", err)
 	}
 
+	// 项目级风格：仅允许在创建项目时配置，这里统一从 Drama 读取
+	var episode models.Episode
+	if err := s.db.Preload("Drama").First(&episode, storyboard.EpisodeID).Error; err == nil {
+		req.Style = normalizeDramaStyle(episode.Drama.Style)
+	} else {
+		req.Style = normalizeDramaStyle("")
+	}
+
 	// 获取场景信息
 	var scene *models.Scene
 	if storyboard.SceneID != nil {
@@ -129,6 +137,18 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 	}
 
 	return response, nil
+}
+
+func normalizeDramaStyle(style string) string {
+	style = strings.TrimSpace(style)
+	switch style {
+	case "anime":
+		return "动漫风格"
+	case "realistic", "":
+		return "写实风格"
+	default:
+		return style
+	}
 }
 
 // saveFramePrompt 保存帧提示词到数据库
@@ -446,7 +466,7 @@ func (s *FramePromptService) buildFallbackPrompt(sb models.Storyboard, scene *mo
 
 	// 场景
 	if scene != nil {
-		parts = append(parts, fmt.Sprintf("%s, %s", scene.Location, scene.Time))
+		parts = append(parts, fmt.Sprintf("%s，%s", scene.Location, scene.Time))
 	}
 
 	// 角色
@@ -461,21 +481,7 @@ func (s *FramePromptService) buildFallbackPrompt(sb models.Storyboard, scene *mo
 		parts = append(parts, *sb.Atmosphere)
 	}
 
-	// 根据style参数映射到具体的风格描述
-	style = strings.TrimSpace(style)
-	var styleDesc string
-	switch style {
-	case "anime":
-		styleDesc = "动漫风格, anime style"
-	case "realistic":
-		styleDesc = "写实风格, realistic style"
-	default:
-		if style == "" {
-			styleDesc = "动漫风格, anime style"
-		} else {
-			styleDesc = style
-		}
-	}
+	styleDesc := normalizeDramaStyle(style)
 	parts = append(parts, styleDesc, suffix)
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, "，")
 }

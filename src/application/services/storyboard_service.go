@@ -440,13 +440,13 @@ func (s *StoryboardService) generateImagePrompt(sb Storyboard) string {
 		parts = append(parts, sb.Emotion)
 	}
 
-	// 4. 动漫风格
-	parts = append(parts, "anime style, first frame")
+	// 4. 风格（仅中文）
+	parts = append(parts, "写实风格", "首帧", "静态画面")
 
 	if len(parts) > 0 {
-		return strings.Join(parts, ", ")
+		return strings.Join(parts, "，")
 	}
-	return "anime scene"
+	return "写实风格场景"
 }
 
 // extractInitialPose 提取初始静态姿态（去除动作过程）
@@ -564,64 +564,64 @@ func (s *StoryboardService) generateVideoPrompt(sb Storyboard) string {
 
 	// 1. 人物动作
 	if sb.Action != "" {
-		parts = append(parts, fmt.Sprintf("Action: %s", sb.Action))
+		parts = append(parts, fmt.Sprintf("动作：%s", sb.Action))
 	}
 
 	// 2. 对话
 	if sb.Dialogue != "" {
-		parts = append(parts, fmt.Sprintf("Dialogue: %s", sb.Dialogue))
+		parts = append(parts, fmt.Sprintf("对白：%s", sb.Dialogue))
 	}
 
 	// 3. 镜头运动（视频特有）
 	if sb.Movement != "" {
-		parts = append(parts, fmt.Sprintf("Camera movement: %s", sb.Movement))
+		parts = append(parts, fmt.Sprintf("运镜：%s", sb.Movement))
 	}
 
 	// 4. 镜头类型和角度
 	if sb.ShotType != "" {
-		parts = append(parts, fmt.Sprintf("Shot type: %s", sb.ShotType))
+		parts = append(parts, fmt.Sprintf("景别：%s", sb.ShotType))
 	}
 	if sb.Angle != "" {
-		parts = append(parts, fmt.Sprintf("Camera angle: %s", sb.Angle))
+		parts = append(parts, fmt.Sprintf("机位：%s", sb.Angle))
 	}
 
 	// 5. 场景环境
 	if sb.Location != "" {
 		locationDesc := sb.Location
 		if sb.Time != "" {
-			locationDesc += ", " + sb.Time
+			locationDesc += "，" + sb.Time
 		}
-		parts = append(parts, fmt.Sprintf("Scene: %s", locationDesc))
+		parts = append(parts, fmt.Sprintf("场景：%s", locationDesc))
 	}
 
 	// 6. 环境氛围
 	if sb.Atmosphere != "" {
-		parts = append(parts, fmt.Sprintf("Atmosphere: %s", sb.Atmosphere))
+		parts = append(parts, fmt.Sprintf("氛围：%s", sb.Atmosphere))
 	}
 
 	// 7. 情绪和结果
 	if sb.Emotion != "" {
-		parts = append(parts, fmt.Sprintf("Mood: %s", sb.Emotion))
+		parts = append(parts, fmt.Sprintf("情绪：%s", sb.Emotion))
 	}
 	if sb.Result != "" {
-		parts = append(parts, fmt.Sprintf("Result: %s", sb.Result))
+		parts = append(parts, fmt.Sprintf("结果：%s", sb.Result))
 	}
 
 	// 8. 音频元素
 	if sb.BgmPrompt != "" {
-		parts = append(parts, fmt.Sprintf("BGM: %s", sb.BgmPrompt))
+		parts = append(parts, fmt.Sprintf("背景音乐：%s", sb.BgmPrompt))
 	}
 	if sb.SoundEffect != "" {
-		parts = append(parts, fmt.Sprintf("Sound effects: %s", sb.SoundEffect))
+		parts = append(parts, fmt.Sprintf("音效：%s", sb.SoundEffect))
 	}
 
-	// 9. 视频风格要求
-	parts = append(parts, "Style: cinematic anime style, smooth camera motion, natural character movement")
+	// 9. 视频风格要求（仅中文）
+	parts = append(parts, "风格：写实风格，平滑运镜，自然角色动作")
 
 	if len(parts) > 0 {
-		return strings.Join(parts, ". ")
+		return strings.Join(parts, "。")
 	}
-	return "Anime style video scene"
+	return "写实风格视频场景"
 }
 
 func (s *StoryboardService) saveStoryboards(episodeID string, storyboards []Storyboard) error {

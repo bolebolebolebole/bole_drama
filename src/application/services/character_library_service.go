@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	models "github.com/drama-generator/backend/domain/models"
@@ -299,7 +300,7 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 		return nil, err
 	}
 
-	// 构建生成提示词 - 使用详细的外貌描述，添加干净背景要求
+	// 构建生成提示词 - 全程使用中文，风格来自项目配置
 	prompt := ""
 
 	// 优先使用appearance字段，它包含了最详细的外貌描述
@@ -311,16 +312,26 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 		prompt = character.Name
 	}
 
-	// 添加角色画像和风格要求
-	prompt += ", character portrait, full body or upper body shot"
+	styleDesc := "写实风格"
+	if strings.TrimSpace(drama.Style) == "anime" {
+		styleDesc = "动漫风格"
+	}
 
-	// 添加干净背景要求 - 确保背景简洁不干扰主体
-	prompt += ", simple clean background, plain solid color background, white or light gray background"
-	prompt += ", studio lighting, professional photography"
+	// 加入项目风格（前置），避免后续被英文标签污染
+	if styleDesc != "" {
+		prompt = styleDesc + "，" + prompt
+	}
 
-	// 添加质量和风格要求
-	prompt += ", high quality, detailed, anime style, character design"
-	prompt += ", no complex background, no scenery, focus on character"
+	// 角色画像要求
+	prompt += "，角色肖像，全身或半身镜头"
+
+	// 干净背景要求 - 确保背景简洁不干扰主体
+	prompt += "，背景简洁，纯色背景，白色或浅灰背景"
+	prompt += "，棚拍光，专业摄影"
+
+	// 质量要求
+	prompt += "，高质量，细节丰富，画面清晰，突出角色主体"
+	prompt += "，无复杂背景，无景物"
 
 	// 调用图片生成服务
 	dramaIDStr := fmt.Sprintf("%d", character.DramaID)

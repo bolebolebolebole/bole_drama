@@ -11,30 +11,6 @@
       </template>
 
       <template #right>
-        <div class="style-control">
-          <span class="style-label">风格</span>
-          <el-select
-            v-model="style"
-            class="style-select"
-            size="small"
-            aria-label="风格 Style"
-          >
-            <el-option label="动漫" value="anime" />
-            <el-option label="写实" value="realistic" />
-          </el-select>
-        </div>
-        <div class="aspect-ratio-control">
-          <span class="aspect-ratio-label">画幅</span>
-          <el-select
-            v-model="aspectRatio"
-            class="aspect-ratio-select"
-            size="small"
-            aria-label="画幅 Aspect Ratio"
-          >
-            <el-option label="横屏 16:9" value="16:9" />
-            <el-option label="竖屏 9:16" value="9:16" />
-          </el-select>
-        </div>
       </template>
     </AppHeader>
 
@@ -1109,35 +1085,7 @@ const totalDuration = computed(() => {
 const selectedCharacters = ref<number[]>([])
 const narrativeTab = ref('shot-prompt')
 
-// 风格 / Style（仅用于视频生成）
-const STYLE_STORAGE_KEY = 'global_style'
-const savedStyle = localStorage.getItem(STYLE_STORAGE_KEY)
-const style = ref<'anime' | 'realistic'>(savedStyle === 'anime' || savedStyle === 'realistic' ? savedStyle : 'anime')
-
-// 监听全局风格变化
-window.addEventListener('global-style-changed', (e: Event) => {
-  const customEvent = e as CustomEvent
-  if (customEvent.detail?.style) {
-    style.value = customEvent.detail.style
-  }
-})
-
-// 监听风格变化，保存到localStorage
-watch(style, (newValue) => {
-  localStorage.setItem(STYLE_STORAGE_KEY, newValue)
-})
-
-// 画幅 / Aspect Ratio（仅用于视频生成）
-const ASPECT_RATIO_STORAGE_KEY = 'global_aspect_ratio'
-const savedAspectRatio = localStorage.getItem(ASPECT_RATIO_STORAGE_KEY)
-const aspectRatio = ref<'16:9' | '9:16'>(savedAspectRatio === '16:9' || savedAspectRatio === '9:16' ? savedAspectRatio : '16:9')
-
-// 监听画幅变化，保存到localStorage
-watch(aspectRatio, (newValue) => {
-  localStorage.setItem(ASPECT_RATIO_STORAGE_KEY, newValue)
-})
-
-  // 图片生成相关状态
+// 图片生成相关状态
   const selectedFrameType = ref<FrameType>('key')
   const panelCount = ref(3)
   const generatingPrompt = ref(false)
@@ -1159,6 +1107,7 @@ watch(aspectRatio, (newValue) => {
   const loadingImages = ref(false)
   // 轮询机制改为按镜头ID管理（支持多镜头同时生成）
   const pollingTimers = new Map<number, any>() // 每个镜头一个图片轮询定时器
+  const pollingFrameTypes = new Map<number, FrameType>() // 每个镜头正在轮询的帧类型
   const videoPollingTimers = new Map<number, any>() // 每个镜头一个视频轮询定时器
   let mergePollingTimer: any = null  // 视频合成列表轮询定时器
 
@@ -1925,7 +1874,7 @@ const handleVideoImageUploadSuccess = async (response: any, frameType: string) =
     videoReferenceImages.value.push(newImage)
     ElMessage.success('图片上传成功')
 
-    await loadVideoReferenceImages()
+    await loadVideoReferenceImages(currentStoryboard.value.id)
   } catch (error: any) {
     ElMessage.error('保存失败：' + (error.message || '未知错误'))
   }
@@ -2039,8 +1988,7 @@ const extractFramePrompt = async () => {
   generatingPrompt.value = true
   try {
     const params: any = {
-      frame_type: targetFrameType,
-      style: style.value // 传递全局风格设置（anime/realistic）
+      frame_type: targetFrameType
     }
     if (targetFrameType === 'panel') {
       params.panel_count = panelCount.value
@@ -2238,12 +2186,6 @@ const generateFrameImage = async () => {
       .map(slot => getReferenceImageUrl(slot))
       .filter((url): url is string => typeof url === 'string' && url.length > 0)
 
-    // 根据画幅计算尺寸（使用VolcEngine推荐尺寸）
-    let size = '2560x1440'
-    if (aspectRatio.value === '9:16') {
-      size = '1440x2560'
-    }
-
     const result = await imageAPI.generateImage({
       drama_id: dramaId.toString(),
       prompt: currentFramePrompt.value,
@@ -2252,9 +2194,7 @@ const generateFrameImage = async () => {
       frame_type: selectedFrameType.value,
       reference_images: referenceImages.length > 0 ? referenceImages : undefined,
       provider: 'volcengine',
-      model: 'doubao-seedream-4-5-251128',
-      size: size,
-      style: style.value
+      model: 'doubao-seedream-4-5-251128'
     })
 
     generatedImages.value.unshift(result)
@@ -2547,11 +2487,9 @@ const generateVideo = async () => {
       storyboard_id: storyboardId,
       prompt: finalPrompt,
       duration: videoDuration.value,
-      aspect_ratio: aspectRatio.value,
       provider: provider,
       model: selectedVideoModel.value,
-      reference_mode: selectedReferenceMode.value,
-      style: style.value
+      reference_mode: selectedReferenceMode.value
     }
 
     // 根据参考图模式设置参数

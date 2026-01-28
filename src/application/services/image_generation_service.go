@@ -137,6 +137,36 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		height = &sceneHeight
 		size = "2048x2048"
 		s.log.Infow("Enforced scene image dimensions", "width", *width, "height", *height, "ratio", "1:1")
+	case string(models.ImageTypeStoryboard):
+		// 分镜图片：按项目全局画幅配置强制 16:9 / 9:16
+		aspectRatio := strings.TrimSpace(drama.AspectRatio)
+		if aspectRatio == "" {
+			aspectRatio = "9:16"
+		}
+
+		switch aspectRatio {
+		case "16:9":
+			storyboardWidth := 2560
+			storyboardHeight := 1440
+			width = &storyboardWidth
+			height = &storyboardHeight
+			size = "2560x1440"
+		case "9:16":
+			storyboardWidth := 1440
+			storyboardHeight := 2560
+			width = &storyboardWidth
+			height = &storyboardHeight
+			size = "1440x2560"
+		default:
+			// 容错：不识别则回退 9:16
+			storyboardWidth := 1440
+			storyboardHeight := 2560
+			width = &storyboardWidth
+			height = &storyboardHeight
+			size = "1440x2560"
+			aspectRatio = "9:16"
+		}
+		s.log.Infow("Enforced storyboard image dimensions", "width", *width, "height", *height, "ratio", aspectRatio)
 	default:
 		// 分镜图片保持原有逻辑，允许用户指定尺寸
 		width = request.Width

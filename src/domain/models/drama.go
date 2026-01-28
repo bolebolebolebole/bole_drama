@@ -13,6 +13,7 @@ type Drama struct {
 	Description   *string        `gorm:"type:text" json:"description"`
 	Genre         *string        `gorm:"type:varchar(50)" json:"genre"`
 	Style         string         `gorm:"type:varchar(50);default:'realistic'" json:"style"`
+	AspectRatio   string         `gorm:"type:varchar(20);default:'9:16'" json:"aspect_ratio"`
 	TotalEpisodes int            `gorm:"default:1" json:"total_episodes"`
 	TotalDuration int            `gorm:"default:0" json:"total_duration"`
 	Status        string         `gorm:"type:varchar(20);default:'draft';not null" json:"status"`
@@ -88,34 +89,34 @@ func (e *Episode) TableName() string {
 }
 
 type Storyboard struct {
-	ID               uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	EpisodeID        uint           `gorm:"not null;index:idx_storyboards_episode_id" json:"episode_id"`
-	SceneID          *uint          `gorm:"index:idx_storyboards_scene_id;column:scene_id" json:"scene_id"`
-	StoryboardNumber int            `gorm:"not null;column:storyboard_number" json:"storyboard_number"`
-	Title            *string        `gorm:"size:255" json:"title"`
-	Location         *string        `gorm:"size:255" json:"location"`
-	Time             *string        `gorm:"size:255" json:"time"`
-	ShotType         *string        `gorm:"size:100" json:"shot_type"`
-	Angle            *string        `gorm:"size:100" json:"angle"`
-	Movement         *string        `gorm:"size:100" json:"movement"`
-	Action           *string        `gorm:"type:text" json:"action"`
-	Result           *string        `gorm:"type:text" json:"result"`
-	Atmosphere       *string        `gorm:"type:text" json:"atmosphere"`
-	ImagePrompt      *string        `gorm:"type:text" json:"image_prompt"`
-	VideoPrompt      *string        `gorm:"type:text" json:"video_prompt"`
-	VideoPromptIsCustom bool        `gorm:"not null;default:false" json:"video_prompt_is_custom"`
-	BgmPrompt        *string        `gorm:"type:text" json:"bgm_prompt"`
-	SoundEffect      *string        `gorm:"size:255" json:"sound_effect"`
-	Dialogue         *string        `gorm:"type:text" json:"dialogue"`
-	Description      *string        `gorm:"type:text" json:"description"`
-	Duration         int            `gorm:"default:5" json:"duration"`
-	ComposedImage    *string        `gorm:"type:text" json:"composed_image"`
-	VideoURL         *string        `gorm:"type:text" json:"video_url"`
-	Status           string         `gorm:"type:varchar(20);default:'pending'" json:"status"`
-	ReferenceOverrides datatypes.JSON `gorm:"type:json" json:"reference_overrides"`
-	CreatedAt        time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                  uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	EpisodeID           uint           `gorm:"not null;index:idx_storyboards_episode_id" json:"episode_id"`
+	SceneID             *uint          `gorm:"index:idx_storyboards_scene_id;column:scene_id" json:"scene_id"`
+	StoryboardNumber    int            `gorm:"not null;column:storyboard_number" json:"storyboard_number"`
+	Title               *string        `gorm:"size:255" json:"title"`
+	Location            *string        `gorm:"size:255" json:"location"`
+	Time                *string        `gorm:"size:255" json:"time"`
+	ShotType            *string        `gorm:"size:100" json:"shot_type"`
+	Angle               *string        `gorm:"size:100" json:"angle"`
+	Movement            *string        `gorm:"size:100" json:"movement"`
+	Action              *string        `gorm:"type:text" json:"action"`
+	Result              *string        `gorm:"type:text" json:"result"`
+	Atmosphere          *string        `gorm:"type:text" json:"atmosphere"`
+	ImagePrompt         *string        `gorm:"type:text" json:"image_prompt"`
+	VideoPrompt         *string        `gorm:"type:text" json:"video_prompt"`
+	VideoPromptIsCustom bool           `gorm:"not null;default:false" json:"video_prompt_is_custom"`
+	BgmPrompt           *string        `gorm:"type:text" json:"bgm_prompt"`
+	SoundEffect         *string        `gorm:"size:255" json:"sound_effect"`
+	Dialogue            *string        `gorm:"type:text" json:"dialogue"`
+	Description         *string        `gorm:"type:text" json:"description"`
+	Duration            int            `gorm:"default:5" json:"duration"`
+	ComposedImage       *string        `gorm:"type:text" json:"composed_image"`
+	VideoURL            *string        `gorm:"type:text" json:"video_url"`
+	Status              string         `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	ReferenceOverrides  datatypes.JSON `gorm:"type:json" json:"reference_overrides"`
+	CreatedAt           time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt           time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt           gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Episode    Episode     `gorm:"foreignKey:EpisodeID;constraint:OnDelete:CASCADE" json:"episode,omitempty"`
 	Background *Scene      `gorm:"foreignKey:SceneID" json:"background,omitempty"`

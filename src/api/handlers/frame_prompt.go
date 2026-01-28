@@ -29,7 +29,6 @@ func (h *FramePromptHandler) GenerateFramePrompt(c *gin.Context) {
 	var req struct {
 		FrameType  string `json:"frame_type"`
 		PanelCount int    `json:"panel_count"`
-		Style      string `json:"style"`
 		Model      string `json:"model"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,7 +40,7 @@ func (h *FramePromptHandler) GenerateFramePrompt(c *gin.Context) {
 		StoryboardID: storyboardID,
 		FrameType:    services.FrameType(req.FrameType),
 		PanelCount:   req.PanelCount,
-		Style:        req.Style,
+		Style:        "",
 	}
 
 	result, err := h.framePromptService.GenerateFramePrompt(serviceReq, req.Model)

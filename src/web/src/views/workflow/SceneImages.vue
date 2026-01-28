@@ -91,12 +91,12 @@ const generateImage = async (scene: Scene) => {
   try {
     const { imageAPI } = await import('@/api/image')
     
-    // 构建场景提示词
-    let prompt = `${scene.location}, ${scene.time}`
+    // 构建场景提示词（纯中文，不强制追加风格）
+    let prompt = `${scene.location}，${scene.time}`
     if (scene.description) {
-      prompt += `, ${scene.description}`
+      prompt += `，${scene.description}`
     }
-    prompt += ', detailed background scene, anime style, high quality, no characters'
+    prompt += '。无人物，无角色，空场景。细节丰富，高质量。'
     
     await imageAPI.generateImage({
       drama_id: dramaId,

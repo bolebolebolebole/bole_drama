@@ -90,7 +90,7 @@ const handleAddCustomReference = (reference: ReferenceImage) => {
   customReferenceImages.value.push({
     key: key,
     name: reference.name,
-    url: reference.originalUrl,
+    url: reference.url,
     isCustom: true,
     disabled: false
   })

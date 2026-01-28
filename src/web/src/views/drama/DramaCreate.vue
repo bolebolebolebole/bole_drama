@@ -49,6 +49,20 @@
             />
           </el-form-item>
 
+          <el-form-item label="风格" prop="style">
+            <el-select v-model="form.style" placeholder="选择风格" size="large" style="width: 100%;">
+              <el-option label="写实" value="realistic" />
+              <el-option label="动漫" value="anime" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="画幅" prop="aspect_ratio">
+            <el-select v-model="form.aspect_ratio" placeholder="选择画幅" size="large" style="width: 100%;">
+              <el-option label="竖屏 9:16" value="9:16" />
+              <el-option label="横屏 16:9" value="16:9" />
+            </el-select>
+          </el-form-item>
+
           <div class="form-actions">
             <el-button size="large" @click="goBack">取消</el-button>
             <el-button 
@@ -82,7 +96,9 @@ const loading = ref(false)
 
 const form = reactive<CreateDramaRequest>({
   title: '',
-  description: ''
+  description: '',
+  style: 'realistic',
+  aspect_ratio: '9:16'
 })
 
 const rules: FormRules = {
