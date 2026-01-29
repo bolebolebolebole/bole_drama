@@ -122,12 +122,13 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 
 	switch imageType {
 	case string(models.ImageTypeCharacter):
-		// 角色图片：强制 3:4 长宽比 (1536x2048)
-		characterWidth := 1536
-		characterHeight := 2048
+		// 角色图片：强制 3:4 长宽比，且满足下游模型最小像素要求（>= 3,686,400）
+		// 1664x2240 = 3,727,360 pixels
+		characterWidth := 1664
+		characterHeight := 2240
 		width = &characterWidth
 		height = &characterHeight
-		size = "1536x2048"
+		size = "1664x2240"
 		s.log.Infow("Enforced character image dimensions", "width", *width, "height", *height, "ratio", "3:4")
 	case string(models.ImageTypeScene):
 		// 场景图片：强制 1:1 长宽比 (2048x2048)
