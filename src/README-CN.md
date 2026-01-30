@@ -234,74 +234,6 @@ go run main.go
 ---
 
 ## 📦 部署指南
-
-### 🐳 Docker 部署（推荐）
-
-#### 方式一：Docker Compose（推荐）
-
-```bash
-# 启动服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-```
-
-#### 方式二：Docker 命令
-
-> **注意**：Linux 用户需添加 `--add-host=host.docker.internal:host-gateway` 以访问宿主机服务
-
-```bash
-# 从 Docker Hub 运行
-docker run -d \
-  --name huobao-drama \
-  -p 5678:5678 \
-  -v $(pwd)/data:/app/data \
-  --restart unless-stopped \
-  huobao/huobao-drama:latest
-
-# 查看日志
-docker logs -f huobao-drama
-```
-
-**本地构建**（可选）：
-
-```bash
-docker build -t huobao-drama:latest .
-docker run -d --name huobao-drama -p 5678:5678 -v $(pwd)/data:/app/data huobao-drama:latest
-```
-
-**Docker 部署优势：**
-
-- ✅ 开箱即用，内置默认配置
-- ✅ 环境一致性，避免依赖问题
-- ✅ 一键启动，无需安装 Go、Node.js、FFmpeg
-- ✅ 易于迁移和扩展
-- ✅ 自动健康检查和重启
-- ✅ 自动处理文件权限，无需手动配置
-
-#### 🔗 访问宿主机服务（Ollama/本地模型）
-
-容器已配置支持访问宿主机服务，直接使用 `http://host.docker.internal:端口号` 即可。
-
-**配置步骤：**
-
-1. **宿主机启动服务（监听所有接口）**
-
-   ```bash
-   export OLLAMA_HOST=0.0.0.0:11434 && ollama serve
-   ```
-
-2. **前端 AI 服务配置**
-   - Base URL: `http://host.docker.internal:11434/v1`
-   - Provider: `openai`
-   - Model: `qwen2.5:latest`
-
----
-
 ### 🏭 传统部署方式
 
 #### 1. 编译构建
@@ -481,15 +413,6 @@ server {
 
 ## 📝 常见问题
 
-### Q: Docker 容器如何访问宿主机的 Ollama？
-
-A: 使用 `http://host.docker.internal:11434/v1` 作为 Base URL。注意两点：
-
-1. 宿主机 Ollama 需监听 `0.0.0.0`：`export OLLAMA_HOST=0.0.0.0:11434 && ollama serve`
-2. Linux 用户使用 `docker run` 需添加：`--add-host=host.docker.internal:host-gateway`
-
-详见：[DOCKER_HOST_ACCESS.md](docs/DOCKER_HOST_ACCESS.md)
-
 ### Q: FFmpeg 未安装或找不到？
 
 A: 确保 FFmpeg 已安装并在 PATH 环境变量中。运行 `ffmpeg -version` 验证。
@@ -512,7 +435,6 @@ A: GORM 会在首次启动时自动创建表，检查日志确认迁移是否成
 
 - SQLite 纯 Go 驱动（`modernc.org/sqlite`），支持 `CGO_ENABLED=0` 跨平台编译
 - 优化并发性能（WAL 模式），解决 "database is locked" 错误
-- Docker 跨平台支持 `host.docker.internal` 访问宿主机服务
 - 精简文档和部署指南
 
 ### v1.0.1 (2026-01-14)

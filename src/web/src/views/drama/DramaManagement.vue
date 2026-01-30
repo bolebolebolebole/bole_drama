@@ -173,6 +173,18 @@
                 <p class="desc">{{ character.appearance || character.description }}</p>
               </div>
 
+              <div class="character-image-actions">
+                <el-button
+                  size="small"
+                  text
+                  type="primary"
+                  :icon="Picture"
+                  @click="openImageManager(character.id, 'character')"
+                >
+                  管理图片 ({{ getImageCount(character) }})
+                </el-button>
+              </div>
+
               <div class="character-actions">
                 <el-button
                   size="small"
@@ -238,6 +250,18 @@
               <div class="scene-info">
                 <h4>{{ scene.name || scene.location || '场景' }}</h4>
                 <p class="desc">{{ scene.description || scene.prompt }}</p>
+              </div>
+
+              <div class="scene-image-actions">
+                <el-button
+                  size="small"
+                  text
+                  type="primary"
+                  :icon="Picture"
+                  @click="openImageManager(scene.id, 'scene')"
+                >
+                  管理图片 ({{ getImageCount(scene) }})
+                </el-button>
               </div>
 
               <div class="scene-actions">
@@ -441,6 +465,12 @@
         </el-button>
       </template>
     </el-dialog>
+    <ImageManagerDialog
+      v-model="imageManagerVisible"
+      :type="imageManagerType"
+      :entity-id="imageManagerEntityId"
+      @refresh="handleImageManagerRefresh"
+    />
     </div>
   </div>
 </template>
@@ -456,6 +486,7 @@ import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
 import type { ImageGeneration } from '@/types/image'
 import { AppHeader, StatCard } from '@/components/common'
+import ImageManagerDialog from '@/components/ImageManagerDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -489,6 +520,10 @@ const editSceneForm = ref({
   time: '',
   prompt: ''
 })
+
+const imageManagerVisible = ref(false)
+const imageManagerType = ref<'character' | 'scene'>('character')
+const imageManagerEntityId = ref<string | number>(0)
 
 const sceneRegenerating = ref<Record<number, boolean>>({})
 
@@ -531,6 +566,23 @@ const loadScenes = async () => {
   } else {
     scenes.value = []
   }
+}
+
+const openImageManager = (id: string | number, type: 'character' | 'scene') => {
+  imageManagerEntityId.value = id
+  imageManagerType.value = type
+  imageManagerVisible.value = true
+}
+
+const getImageCount = (entity: any) => {
+  if (Array.isArray(entity.images) && entity.images.length > 0) {
+    return entity.images.length
+  }
+  return entity.image_url ? 1 : 0
+}
+
+const handleImageManagerRefresh = async () => {
+  await loadDramaData()
 }
 
 const getStatusType = (status?: string) => {

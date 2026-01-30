@@ -40,6 +40,24 @@ func (s *TaskService) CreateTask(taskType, resourceID string) (*models.AsyncTask
 	return task, nil
 }
 
+// FindActiveTask returns the most recent active task for the same type/resource.
+// "Active" means pending/processing and not older than maxAge.
+func (s *TaskService) FindActiveTask(taskType, resourceID string, maxAge time.Duration) (*models.AsyncTask, error) {
+	var task models.AsyncTask
+	cutoff := time.Now().Add(-maxAge)
+	err := s.db.
+		Where("type = ? AND resource_id = ? AND status IN ? AND created_at >= ?", taskType, resourceID, []string{"pending", "processing"}, cutoff).
+		Order("created_at DESC").
+		First(&task).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &task, nil
+}
+
 // UpdateTaskStatus 更新任务状态
 func (s *TaskService) UpdateTaskStatus(taskID, status string, progress int, message string) error {
 	updates := map[string]interface{}{

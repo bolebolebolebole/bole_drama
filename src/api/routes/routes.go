@@ -85,6 +85,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	})
 
 	aiService := services2.NewAIService(db, log)
+	// Auto-fix: ensure Doubao text model uses Volcengine when available.
+	aiService.EnsureVolcengineTextConfigForDoubao()
 	localStoragePtr := localStorage.(*storage2.LocalStorage)
 	transferService := services2.NewResourceTransferService(db, log)
 	dramaHandler := handlers2.NewDramaHandler(db, cfg, log, nil)
@@ -92,17 +94,19 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	scriptGenHandler := handlers2.NewScriptGenerationHandler(db, cfg, log)
 	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, localStoragePtr, log)
 	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, localStoragePtr)
+	promptExtractionHandler := handlers2.NewPromptExtractionHandler(db, cfg, log, imageGenService)
 	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, localStoragePtr, aiService, log)
 	videoMergeHandler := handlers2.NewVideoMergeHandler(db, nil, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log)
-	assetHandler := handlers2.NewAssetHandler(db, cfg, log)
-	characterLibraryService := services2.NewCharacterLibraryService(db, log)
+	assetHandler := handlers2.NewAssetHandler(db, cfg, log, localStoragePtr)
+	characterLibraryService := services2.NewCharacterLibraryService(db, log, localStoragePtr)
 	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, localStoragePtr)
+	sceneLibraryHandler := handlers2.NewSceneLibraryHandler(db, log, localStoragePtr)
 	uploadHandler, err := handlers2.NewUploadHandler(cfg, log, characterLibraryService)
 	if err != nil {
 		log.Fatalw("Failed to create upload handler", "error", err)
 	}
 	storyboardHandler := handlers2.NewStoryboardHandler(db, cfg, log)
-	sceneHandler := handlers2.NewSceneHandler(db, log, imageGenService)
+	sceneHandler := handlers2.NewSceneHandler(db, log, imageGenService, localStoragePtr)
 	taskHandler := handlers2.NewTaskHandler(db, log)
 	framePromptService := services2.NewFramePromptService(db, cfg, log)
 	framePromptHandler := handlers2.NewFramePromptHandler(framePromptService, log)
@@ -153,6 +157,15 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			characterLibrary.DELETE("/:id", characterLibraryHandler.DeleteLibraryItem)
 		}
 
+		// 场景库路由
+		sceneLibrary := api.Group("/scene-library")
+		{
+			sceneLibrary.GET("", sceneLibraryHandler.ListLibraryItems)
+			sceneLibrary.POST("", sceneLibraryHandler.CreateLibraryItem)
+			sceneLibrary.GET("/:id", sceneLibraryHandler.GetLibraryItem)
+			sceneLibrary.DELETE("/:id", sceneLibraryHandler.DeleteLibraryItem)
+		}
+
 		// 角色图片相关路由
 		characters := api.Group("/characters")
 		{
@@ -162,8 +175,13 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			characters.POST("/:id/generate-image", characterLibraryHandler.GenerateCharacterImage)
 			characters.POST("/:id/upload-image", uploadHandler.UploadCharacterImage)
 			characters.PUT("/:id/image", characterLibraryHandler.UploadCharacterImage)
+			characters.GET("/:id/images", characterLibraryHandler.ListCharacterImages)
+			characters.POST("/:id/images", characterLibraryHandler.AddCharacterImage)
+			characters.PUT("/:id/images/reorder", characterLibraryHandler.ReorderCharacterImages)
+			characters.DELETE("/:id/images/:image_id", characterLibraryHandler.DeleteCharacterImage)
 			characters.PUT("/:id/image-from-library", characterLibraryHandler.ApplyLibraryItemToCharacter)
 			characters.POST("/:id/add-to-library", characterLibraryHandler.AddCharacterToLibrary)
+			characters.POST("/:id/reextract-prompt", promptExtractionHandler.ReextractCharacterPrompt)
 		}
 
 		// 文件上传路由
@@ -196,6 +214,13 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			scenes.PUT("/:scene_id", sceneHandler.UpdateScene)
 			scenes.DELETE("/:scene_id", sceneHandler.DeleteScene)
 			scenes.POST("/generate-image", sceneHandler.GenerateSceneImage)
+			scenes.GET("/:scene_id/images", sceneHandler.ListSceneImages)
+			scenes.POST("/:scene_id/images", sceneHandler.AddSceneImage)
+			scenes.PUT("/:scene_id/images/reorder", sceneHandler.ReorderSceneImages)
+			scenes.DELETE("/:scene_id/images/:image_id", sceneHandler.DeleteSceneImage)
+			scenes.PUT("/:scene_id/image-from-library", sceneLibraryHandler.ApplyLibraryItemToScene)
+			scenes.POST("/:scene_id/add-to-library", sceneLibraryHandler.AddSceneToLibrary)
+			scenes.POST("/:scene_id/reextract-prompt", promptExtractionHandler.ReextractScenePrompt)
 		}
 
 		images := api.Group("/images")

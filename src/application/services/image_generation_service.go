@@ -62,6 +62,81 @@ func (s *ImageGenerationService) GetDB() *gorm.DB {
 	return s.db
 }
 
+type singleScenePromptResult struct {
+	Prompt string `json:"prompt"`
+}
+
+// ReextractScenePrompt 重新从剧本中为指定场景生成 prompt 字段（仅更新该场景，不影响其他场景）
+func (s *ImageGenerationService) ReextractScenePrompt(sceneID uint, scriptContent string, model string) (*models.Scene, error) {
+	var scene models.Scene
+	if err := s.db.Where("id = ?", sceneID).First(&scene).Error; err != nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+	if scriptContent == "" {
+		return nil, fmt.Errorf("script content is empty")
+	}
+
+	// 获取AI客户端（如果指定了模型则使用指定的模型）
+	var client ai.AIClient
+	var err error
+	if model != "" {
+		s.log.Infow("Using specified model for single scene re-extraction", "model", model, "scene_id", sceneID)
+		client, err = s.aiService.GetAIClientForModel("text", model)
+		if err != nil {
+			s.log.Warnw("Failed to get client for specified model, using default", "model", model, "error", err)
+			client, err = s.aiService.GetAIClient("text")
+		}
+	} else {
+		client, err = s.aiService.GetAIClient("text")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get AI client: %w", err)
+	}
+
+	systemPrompt := `你是一个专业的提示词工程师，擅长为AI图像生成模型撰写高质量的纯中文背景场景提示词。
+
+你的任务是：只为指定的场景生成一个适合生成“可复用场景背景图/场景库”的prompt。
+
+【核心原则：prompt必须严格静态化】
+只描述稳定的背景环境，不得包含任何剧情镜头内容。
+
+要求：
+1. 只返回一个JSON对象，不要包含markdown代码块或任何解释文字。
+2. JSON结构必须是：{"prompt":"..."}
+3. prompt必须是纯中文，不得包含任何英文单词、字母或英文标点。
+4. prompt必须描述“空场景/纯背景”，必须明确写出“无人物，无角色，空场景”。
+5. prompt要包含环境细节、建筑/物品、光照、色调、氛围（仅作为环境形容词），细节丰富，高质量。
+
+严禁：人物/角色/人群、动作/事件/剧情进展、情绪/心理/状态判断、他人名字/互动、镜头语言/摄影术语、拟人化叙事（如“仿佛在等待”）。`
+
+	userPrompt := fmt.Sprintf("【地点】%s\n【时间】%s\n\n【剧本内容】\n%s\n\n请输出JSON：{\"prompt\":\"...\"}\n提示：prompt需以\"动漫风格纯背景场景\"开头，并明确“无人物，无角色，空场景”。不要写任何人物、动作、剧情、镜头术语或拟人化叙事。", scene.Location, scene.Time, scriptContent)
+
+	text, err := client.GenerateText(userPrompt, systemPrompt, ai.WithTemperature(0.4))
+	if err != nil {
+		s.log.Errorw("Failed to reextract scene prompt", "error", err, "scene_id", sceneID)
+		return nil, fmt.Errorf("重新提取场景提示词失败: %w", err)
+	}
+
+	var result singleScenePromptResult
+	if err := utils.SafeParseAIJSON(text, &result); err != nil {
+		s.log.Errorw("Failed to parse scene prompt JSON", "error", err, "scene_id", sceneID, "raw_response", text[:min(len(text), 500)])
+		return nil, fmt.Errorf("解析AI返回结果失败: %w", err)
+	}
+	if result.Prompt == "" {
+		return nil, fmt.Errorf("AI返回的prompt为空")
+	}
+
+	if err := s.db.Model(&scene).Update("prompt", result.Prompt).Error; err != nil {
+		s.log.Errorw("Failed to update scene prompt", "error", err, "scene_id", sceneID)
+		return nil, fmt.Errorf("更新场景失败: %w", err)
+	}
+
+	if err := s.db.Where("id = ?", sceneID).First(&scene).Error; err != nil {
+		return nil, err
+	}
+	return &scene, nil
+}
+
 type GenerateImageRequest struct {
 	StoryboardID    *uint    `json:"storyboard_id"`
 	DramaID         string   `json:"drama_id" binding:"required"`
@@ -360,32 +435,40 @@ func (s *ImageGenerationService) pollTaskStatus(imageGenID uint, client image.Im
 func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result *image.ImageResult) {
 	now := time.Now()
 
-	// 下载图片到本地存储（仅用于缓存，不更新数据库）
-	// 仅下载 HTTP/HTTPS URL，跳过 data URI
+	finalImageURL := result.ImageURL
+	originalImageURL := result.ImageURL
+
+	// 将远程临时URL（如TOS签名URL）持久化到本地存储，保证后续可用。
+	// 仅下载 HTTP/HTTPS URL，跳过 data URI。
 	if s.localStorage != nil && result.ImageURL != "" &&
-		(strings.HasPrefix(result.ImageURL, "http://") || strings.HasPrefix(result.ImageURL, "https://")) {
-		_, err := s.localStorage.DownloadFromURL(result.ImageURL, "images")
+		(strings.HasPrefix(result.ImageURL, "http://") || strings.HasPrefix(result.ImageURL, "https://")) &&
+		!s.localStorage.IsLocalURL(result.ImageURL) {
+		localURL, err := s.localStorage.DownloadFromURL(result.ImageURL, "images")
 		if err != nil {
 			errStr := err.Error()
 			if len(errStr) > 200 {
 				errStr = errStr[:200] + "..."
 			}
-			s.log.Warnw("Failed to download image to local storage",
+			s.log.Warnw("Failed to persist image to local storage",
 				"error", errStr,
 				"id", imageGenID,
 				"original_url", truncateImageURL(result.ImageURL))
 		} else {
-			s.log.Infow("Image downloaded to local storage for caching",
+			finalImageURL = localURL
+			s.log.Infow("Image persisted to local storage",
 				"id", imageGenID,
-				"original_url", truncateImageURL(result.ImageURL))
+				"original_url", truncateImageURL(result.ImageURL),
+				"local_url", truncateImageURL(localURL))
 		}
 	}
 
-	// 数据库中保持使用原始URL
 	updates := map[string]interface{}{
 		"status":       models.ImageStatusCompleted,
-		"image_url":    result.ImageURL,
+		"image_url":    finalImageURL,
 		"completed_at": now,
+	}
+	if originalImageURL != "" && finalImageURL != "" && originalImageURL != finalImageURL {
+		updates["minio_url"] = originalImageURL
 	}
 
 	if result.Width > 0 {
@@ -407,12 +490,12 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 
 	// 如果关联了storyboard，同步更新storyboard的composed_image
 	if imageGen.StoryboardID != nil {
-		if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *imageGen.StoryboardID).Update("composed_image", result.ImageURL).Error; err != nil {
+		if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *imageGen.StoryboardID).Update("composed_image", finalImageURL).Error; err != nil {
 			s.log.Errorw("Failed to update storyboard composed_image", "error", err, "storyboard_id", *imageGen.StoryboardID)
 		} else {
 			s.log.Infow("Storyboard updated with composed image",
 				"storyboard_id", *imageGen.StoryboardID,
-				"composed_image", truncateImageURL(result.ImageURL))
+				"composed_image", truncateImageURL(finalImageURL))
 		}
 	}
 
@@ -420,25 +503,25 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 	if imageGen.SceneID != nil && imageGen.ImageType == string(models.ImageTypeScene) {
 		sceneUpdates := map[string]interface{}{
 			"status":    "generated",
-			"image_url": result.ImageURL,
+			"image_url": finalImageURL,
 		}
 		if err := s.db.Model(&models.Scene{}).Where("id = ?", *imageGen.SceneID).Updates(sceneUpdates).Error; err != nil {
 			s.log.Errorw("Failed to update scene", "error", err, "scene_id", *imageGen.SceneID)
 		} else {
 			s.log.Infow("Scene updated with generated image",
 				"scene_id", *imageGen.SceneID,
-				"image_url", truncateImageURL(result.ImageURL))
+				"image_url", truncateImageURL(finalImageURL))
 		}
 	}
 
 	// 如果关联了角色，同步更新角色的image_url
 	if imageGen.CharacterID != nil {
-		if err := s.db.Model(&models.Character{}).Where("id = ?", *imageGen.CharacterID).Update("image_url", result.ImageURL).Error; err != nil {
+		if err := s.db.Model(&models.Character{}).Where("id = ?", *imageGen.CharacterID).Update("image_url", finalImageURL).Error; err != nil {
 			s.log.Errorw("Failed to update character image_url", "error", err, "character_id", *imageGen.CharacterID)
 		} else {
 			s.log.Infow("Character updated with generated image",
 				"character_id", *imageGen.CharacterID,
-				"image_url", truncateImageURL(result.ImageURL))
+				"image_url", truncateImageURL(finalImageURL))
 		}
 	}
 }
@@ -869,49 +952,53 @@ func (s *ImageGenerationService) extractBackgroundsFromScript(scriptContent stri
 
 	// 强制使用中文格式说明（移除英文支持）
 	formatInstructions := `【输出JSON格式】
-{
-  "backgrounds": [
-    {
-      "location": "地点名称（纯中文）",
-      "time": "时间描述（纯中文）",
-      "atmosphere": "氛围描述（纯中文）",
-      "prompt": "动漫风格纯背景场景，展现[地点描述]在[时间]的环境。画面呈现[环境细节、建筑、物品、光线等，不包含人物]。无人物，无角色，空场景。风格：细节丰富，高质量，氛围光照。情绪：[环境情绪描述]。"
-    }
-  ]
-}
+ {
+   "backgrounds": [
+     {
+       "location": "地点名称（纯中文）",
+       "time": "时间描述（纯中文）",
+       "atmosphere": "氛围描述（纯中文）",
+	      "prompt": "动漫风格纯背景场景，展现[地点描述]在[时间]的环境。画面呈现[环境细节、建筑、物品、光线等，不包含人物]。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：[环境氛围形容词]。"
+     }
+   ]
+ }
 
-【重要约束】
-- 所有字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
-- prompt字段必须是纯中文描述，禁止使用英文术语
-- 禁止使用英文术语，如"background"应写成"背景"，"scene"应写成"场景"，"anime style"应写成"动漫风格"
+	【重要约束】
+	- 所有字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
+	- prompt字段必须是纯中文描述，禁止使用英文术语
+	- 禁止使用英文术语，如"background"应写成"背景"，"scene"应写成"场景"，"anime style"应写成"动漫风格"
+	- prompt必须严格静态化：只写背景环境，不得包含人物、动作、事件、剧情、镜头术语、拟人化叙事
 
-【正确示例】
-{
-  "backgrounds": [
-    {
-      "location": "维修店内部",
-      "time": "深夜",
-      "atmosphere": "昏暗、孤独、工业感",
-      "prompt": "动漫风格纯背景场景，展现凌乱的维修店内部在深夜的环境。昏暗的日光灯照射下，工作台上散落着各种扳手、螺丝刀和机械零件，墙上挂着油污斑斑的工具挂板和褪色海报，地面有油渍痕迹，角落堆放着废旧轮胎。无人物，无角色，空场景。风格：细节丰富，高质量，昏暗氛围。情绪：孤独、工业感。"
-    },
-    {
-      "location": "城市街道",
-      "time": "黄昏",
-      "atmosphere": "温暖、繁忙、生活气息",
-      "prompt": "动漫风格纯背景场景，展现繁华的城市街道在黄昏时分的环境。夕阳的余晖洒在街道的沥青路面上，两旁的商铺霓虹灯开始点亮，街边有自行车停靠架和公交站牌，远处高楼林立，天空呈现橙红色渐变。无人物，无角色，空场景。风格：细节丰富，高质量，温暖氛围。情绪：生活气息、繁忙。"
-    }
-  ]
-}
+	【正确示例】
+	{
+	  "backgrounds": [
+	    {
+	      "location": "维修店内部",
+	      "time": "深夜",
+	      "atmosphere": "昏暗、孤独、工业感",
+	      "prompt": "动漫风格纯背景场景，展现凌乱的维修店内部在深夜的环境。昏暗的日光灯照射下，工作台上散落着各种扳手、螺丝刀和机械零件，墙上挂着油污斑斑的工具挂板和褪色海报，地面有油渍痕迹，角落堆放着废旧轮胎。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：昏暗、冷清、工业感。"
+	    },
+	    {
+	      "location": "城市街道",
+	      "time": "黄昏",
+	      "atmosphere": "温暖、繁忙、生活气息",
+	      "prompt": "动漫风格纯背景场景，展现繁华的城市街道在黄昏时分的环境。夕阳的余晖洒在街道的沥青路面上，两旁的商铺霓虹灯开始点亮，街边有自行车停靠架和公交站牌，远处高楼林立，天空呈现橙红色渐变。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：温暖、繁忙、生活气息。"
+	    }
+	  ]
+	}
 
 【错误示例 - 严禁模仿】
 ❌ "Anime style background scene..." - 包含英文
 ❌ "动漫风格background scene..." - 中英混杂
 ❌ "动漫风格纯背景，depicting a messy..." - 中英混杂
-❌ "展现主角站在街道上的场景" - 包含人物
-❌ "人们匆匆而过" - 包含人物
-❌ "角色在房间里活动" - 包含人物
-
-请严格按照JSON格式输出，确保所有字段都使用纯中文，不得包含任何英文。`
+	❌ "展现主角站在街道上的场景" - 包含人物
+	❌ "人们匆匆而过" - 包含人物
+	❌ "角色在房间里活动" - 包含人物
+	❌ "爆炸后的街道" - 包含事件/剧情
+	❌ "仿佛在等待主人归来" - 拟人化叙事
+	❌ "特写镜头，广角" - 镜头语言
+	
+	请严格按照JSON格式输出，确保所有字段都使用纯中文，不得包含任何英文。`
 
 	prompt := fmt.Sprintf(`%s
 
@@ -999,44 +1086,49 @@ func (s *ImageGenerationService) extractBackgroundsWithAI(storyboards []models.S
 
 	// 强制使用中文格式说明（移除英文支持）
 	formatInstructions := `【输出JSON格式】
-{
-  "backgrounds": [
-    {
-      "location": "地点名称（纯中文）",
-      "time": "时间描述（纯中文）",
-      "prompt": "动漫风格纯背景场景，展现[地点描述]在[时间]的环境。画面呈现[细节描述]。无人物，无角色，空场景。风格：细节丰富，高质量，氛围光照。情绪：[情绪描述]。",
-      "scene_numbers": [1, 2, 3]
-    }
-  ]
-}
+ {
+   "backgrounds": [
+     {
+       "location": "地点名称（纯中文）",
+       "time": "时间描述（纯中文）",
+	      "prompt": "动漫风格纯背景场景，展现[地点描述]在[时间]的环境。画面呈现[细节描述，不包含人物]。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：[环境氛围形容词]。",
+       "scene_numbers": [1, 2, 3]
+     }
+   ]
+ }
 
-【重要约束】
-- 所有字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
-- prompt字段必须是纯中文描述，禁止使用英文术语
-- 禁止使用英文术语，如"background"应写成"背景"，"anime style"应写成"动漫风格"，"close-up"应写成"特写"
+	【重要约束】
+	- 所有字段必须100%使用中文，严禁出现任何英文单词、字母或标点符号
+	- prompt字段必须是纯中文描述，禁止使用英文术语
+	- 禁止使用英文术语，如"background"应写成"背景"，"anime style"应写成"动漫风格"
+	- prompt必须严格静态化：只写背景环境，不得包含人物、动作、事件、剧情、镜头术语、拟人化叙事
 
-【正确示例】
-{
-  "backgrounds": [
-    {
-      "location": "维修店",
-      "time": "深夜",
-      "prompt": "动漫风格纯背景场景，展现凌乱的维修店内部在深夜的环境。昏暗的灯光下，工作台上散落着各种工具和零件，墙上挂着油污的海报。无人物，无角色，空场景。风格：细节丰富，高质量，昏暗氛围。情绪：孤独、工业感。",
-      "scene_numbers": [1, 5, 6, 10, 15]
-    },
-    {
-      "location": "城市全景",
-      "time": "深夜·酸雨",
-      "prompt": "动漫风格纯背景场景，展现沿海城市全景在深夜酸雨中的环境。霓虹灯在雨中模糊，高楼大厦笼罩在灰绿色的雨幕中，街道反射着五颜六色的光。无人物，无角色，空场景。风格：细节丰富，高质量，赛博朋克氛围。情绪：压抑、科幻、末世感。",
-      "scene_numbers": [2, 7]
-    }
-  ]
-}
+	【正确示例】
+	{
+	  "backgrounds": [
+	    {
+	      "location": "维修店",
+	      "time": "深夜",
+	      "prompt": "动漫风格纯背景场景，展现凌乱的维修店内部在深夜的环境。昏暗的灯光下，工作台上散落着各种工具和零件，墙上挂着油污的海报。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：昏暗、冷清、工业感。",
+	      "scene_numbers": [1, 5, 6, 10, 15]
+	    },
+	    {
+	      "location": "城市全景",
+	      "time": "深夜·酸雨",
+	      "prompt": "动漫风格纯背景场景，展现沿海城市全景在深夜酸雨中的环境。霓虹灯在雨中模糊，高楼大厦笼罩在灰绿色的雨幕中，街道反射着五颜六色的光。无人物，无角色，空场景。风格：细节丰富，高质量。氛围：压抑、科幻、末世感。",
+	      "scene_numbers": [2, 7]
+	    }
+	  ]
+	}
 
 【错误示例 - 严禁模仿】
-❌ "Anime style background depicting..." - 包含英文
-❌ "动漫风格background depicting..." - 中英混杂
-❌ "动漫风格纯背景，depicting a messy..." - 中英混杂
+	❌ "Anime style background depicting..." - 包含英文
+	❌ "动漫风格background depicting..." - 中英混杂
+	❌ "动漫风格纯背景，depicting a messy..." - 中英混杂
+	❌ "有人在街上奔跑" - 包含人物/动作
+	❌ "爆炸后的城市" - 包含事件/剧情
+	❌ "仿佛在等待黎明" - 拟人化叙事
+	❌ "广角镜头，俯拍" - 镜头语言
 
 请严格按照JSON格式输出，确保：
 1. prompt字段必须100%使用纯中文，不得包含任何英文

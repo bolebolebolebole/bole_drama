@@ -14,16 +14,106 @@ import (
 
 type CharacterLibraryHandler struct {
 	libraryService *services2.CharacterLibraryService
+	imageList      *services2.CharacterImageService
 	imageService   *services2.ImageGenerationService
 	log            *logger.Logger
 }
 
 func NewCharacterLibraryHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services2.ResourceTransferService, localStorage *storage.LocalStorage) *CharacterLibraryHandler {
 	return &CharacterLibraryHandler{
-		libraryService: services2.NewCharacterLibraryService(db, log),
+		libraryService: services2.NewCharacterLibraryService(db, log, localStorage),
+		imageList:      services2.NewCharacterImageService(db, log, localStorage),
 		imageService:   services2.NewImageGenerationService(db, cfg, transferService, localStorage, log),
 		log:            log,
 	}
+}
+
+// ListCharacterImages returns all images for a character.
+func (h *CharacterLibraryHandler) ListCharacterImages(c *gin.Context) {
+	characterIDStr := c.Param("id")
+	characterID, err := strconv.ParseUint(characterIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的角色ID")
+		return
+	}
+	items, err := h.imageList.List(uint(characterID))
+	if err != nil {
+		h.log.Errorw("Failed to list character images", "error", err, "character_id", characterID)
+		response.InternalError(c, "获取失败")
+		return
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
+// AddCharacterImage appends a new image for a character.
+func (h *CharacterLibraryHandler) AddCharacterImage(c *gin.Context) {
+	characterIDStr := c.Param("id")
+	characterID, err := strconv.ParseUint(characterIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的角色ID")
+		return
+	}
+	var req struct {
+		ImageURL string `json:"image_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	item, err := h.imageList.Add(uint(characterID), req.ImageURL)
+	if err != nil {
+		h.log.Errorw("Failed to add character image", "error", err, "character_id", characterID)
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, item)
+}
+
+// ReorderCharacterImages updates sort order.
+func (h *CharacterLibraryHandler) ReorderCharacterImages(c *gin.Context) {
+	characterIDStr := c.Param("id")
+	characterID, err := strconv.ParseUint(characterIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的角色ID")
+		return
+	}
+	var req struct {
+		ImageIDs []uint `json:"image_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.imageList.Reorder(uint(characterID), req.ImageIDs); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"message": "ok"})
+}
+
+// DeleteCharacterImage deletes an image.
+func (h *CharacterLibraryHandler) DeleteCharacterImage(c *gin.Context) {
+	characterIDStr := c.Param("id")
+	characterID, err := strconv.ParseUint(characterIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的角色ID")
+		return
+	}
+	imageIDStr := c.Param("image_id")
+	imageID, err := strconv.ParseUint(imageIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的图片ID")
+		return
+	}
+	if err := h.imageList.Delete(uint(characterID), uint(imageID)); err != nil {
+		if err.Error() == "not found" {
+			response.NotFound(c, "图片不存在")
+			return
+		}
+		response.InternalError(c, "删除失败")
+		return
+	}
+	response.Success(c, gin.H{"message": "ok"})
 }
 
 // ListLibraryItems 获取角色库列表
@@ -146,6 +236,11 @@ func (h *CharacterLibraryHandler) UploadCharacterImage(c *gin.Context) {
 func (h *CharacterLibraryHandler) ApplyLibraryItemToCharacter(c *gin.Context) {
 
 	characterID := c.Param("id")
+	characterIDUint, err := strconv.ParseUint(characterID, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的角色ID")
+		return
+	}
 
 	var req struct {
 		LibraryItemID string `json:"library_item_id" binding:"required"`
@@ -153,6 +248,17 @@ func (h *CharacterLibraryHandler) ApplyLibraryItemToCharacter(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
+		return
+	}
+
+	libraryItem, err := h.libraryService.GetLibraryItem(req.LibraryItemID)
+	if err != nil {
+		if err.Error() == "library item not found" {
+			response.NotFound(c, "角色库项不存在")
+			return
+		}
+		h.log.Errorw("Failed to get library item", "error", err)
+		response.InternalError(c, "获取角色库项失败")
 		return
 	}
 
@@ -170,6 +276,30 @@ func (h *CharacterLibraryHandler) ApplyLibraryItemToCharacter(c *gin.Context) {
 			return
 		}
 		h.log.Errorw("Failed to apply library item", "error", err)
+		response.InternalError(c, "应用失败")
+		return
+	}
+
+	// Ensure applied image is also tracked in multi-image list.
+	prevImages, err := h.imageList.List(uint(characterIDUint))
+	if err != nil {
+		h.log.Errorw("Failed to list character images before apply", "error", err, "character_id", characterID)
+		response.InternalError(c, "应用失败")
+		return
+	}
+	added, err := h.imageList.Add(uint(characterIDUint), libraryItem.ImageURL)
+	if err != nil {
+		h.log.Errorw("Failed to add character image from library", "error", err, "character_id", characterID, "library_item_id", req.LibraryItemID)
+		response.InternalError(c, "应用失败")
+		return
+	}
+	newOrder := make([]uint, 0, len(prevImages)+1)
+	newOrder = append(newOrder, added.ID)
+	for _, img := range prevImages {
+		newOrder = append(newOrder, img.ID)
+	}
+	if err := h.imageList.Reorder(uint(characterIDUint), newOrder); err != nil {
+		h.log.Errorw("Failed to reorder character images after apply", "error", err, "character_id", characterID)
 		response.InternalError(c, "应用失败")
 		return
 	}

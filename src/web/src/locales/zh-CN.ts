@@ -612,7 +612,8 @@ export default {
     editPrompt: '修改提示词',
     aiGenerate: 'AI生成',
     uploadImage: '上传图片',
-    selectFromLibrary: '从角色库选择'
+    selectFromLibrary: '从角色库选择',
+    reextractPrompt: '重新提取提示词'
   },
   message: {
     deleteConfirm: '确定要删除吗？',

@@ -234,74 +234,6 @@ Database tables are automatically created on first startup (using GORM AutoMigra
 ---
 
 ## 📦 Deployment
-
-### 🐳 Docker Deployment (Recommended)
-
-#### Method 1: Docker Compose (Recommended)
-
-```bash
-# Start services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-#### Method 2: Docker Command
-
-> **Note**: Linux users need to add `--add-host=host.docker.internal:host-gateway` to access host services
-
-```bash
-# Run from Docker Hub
-docker run -d \
-  --name huobao-drama \
-  -p 5678:5678 \
-  -v $(pwd)/data:/app/data \
-  --restart unless-stopped \
-  huobao/huobao-drama:latest
-
-# View logs
-docker logs -f huobao-drama
-```
-
-**Local Build** (optional):
-
-```bash
-docker build -t huobao-drama:latest .
-docker run -d --name huobao-drama -p 5678:5678 -v $(pwd)/data:/app/data huobao-drama:latest
-```
-
-**Docker Deployment Advantages:**
-
-- ✅ Ready to use with default configuration
-- ✅ Environment consistency, avoiding dependency issues
-- ✅ One-click start, no need to install Go, Node.js, FFmpeg
-- ✅ Easy to migrate and scale
-- ✅ Automatic health checks and restarts
-- ✅ Automatic file permission handling
-
-#### 🔗 Accessing Host Services (Ollama/Local Models)
-
-The container is configured to access host services using `http://host.docker.internal:PORT`.
-
-**Configuration Steps:**
-
-1. **Start service on host (listen on all interfaces)**
-
-   ```bash
-   export OLLAMA_HOST=0.0.0.0:11434 && ollama serve
-   ```
-
-2. **Frontend AI Service Configuration**
-   - Base URL: `http://host.docker.internal:11434/v1`
-   - Provider: `openai`
-   - Model: `qwen2.5:latest`
-
----
-
 ### 🏭 Traditional Deployment
 
 #### 1. Build
@@ -481,15 +413,6 @@ server {
 
 ## 📝 FAQ
 
-### Q: How can Docker containers access Ollama on the host?
-
-A: Use `http://host.docker.internal:11434/v1` as Base URL. Note two things:
-
-1. Host Ollama needs to listen on `0.0.0.0`: `export OLLAMA_HOST=0.0.0.0:11434 && ollama serve`
-2. Linux users using `docker run` need to add: `--add-host=host.docker.internal:host-gateway`
-
-See: [DOCKER_HOST_ACCESS.md](docs/DOCKER_HOST_ACCESS.md)
-
 ### Q: FFmpeg not installed or not found?
 
 A: Ensure FFmpeg is installed and in the PATH environment variable. Verify with `ffmpeg -version`.
@@ -512,7 +435,6 @@ A: GORM automatically creates tables on first startup, check logs to confirm mig
 
 - Pure Go SQLite driver (`modernc.org/sqlite`), supports `CGO_ENABLED=0` cross-platform compilation
 - Optimized concurrency performance (WAL mode), resolved "database is locked" errors
-- Docker cross-platform support for `host.docker.internal` to access host services
 - Streamlined documentation and deployment guides
 
 ### v1.0.1 (2026-01-14)

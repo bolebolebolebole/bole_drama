@@ -34,21 +34,22 @@ func (d *Drama) TableName() string {
 }
 
 type Character struct {
-	ID              uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	DramaID         uint           `gorm:"not null;index" json:"drama_id"`
-	Name            string         `gorm:"type:varchar(100);not null" json:"name"`
-	Role            *string        `gorm:"type:varchar(50)" json:"role"`
-	Description     *string        `gorm:"type:text" json:"description"`
-	Appearance      *string        `gorm:"type:text" json:"appearance"`
-	Personality     *string        `gorm:"type:text" json:"personality"`
-	VoiceStyle      *string        `gorm:"type:varchar(200)" json:"voice_style"`
-	ImageURL        *string        `gorm:"type:varchar(500)" json:"image_url"`
-	ReferenceImages datatypes.JSON `gorm:"type:json" json:"reference_images"`
-	SeedValue       *string        `gorm:"type:varchar(100)" json:"seed_value"`
-	SortOrder       int            `gorm:"default:0" json:"sort_order"`
-	CreatedAt       time.Time      `gorm:"not null;autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time      `gorm:"not null;autoUpdateTime" json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	ID              uint             `gorm:"primaryKey;autoIncrement" json:"id"`
+	DramaID         uint             `gorm:"not null;index" json:"drama_id"`
+	Name            string           `gorm:"type:varchar(100);not null" json:"name"`
+	Role            *string          `gorm:"type:varchar(50)" json:"role"`
+	Description     *string          `gorm:"type:text" json:"description"`
+	Appearance      *string          `gorm:"type:text" json:"appearance"`
+	Personality     *string          `gorm:"type:text" json:"personality"`
+	VoiceStyle      *string          `gorm:"type:varchar(200)" json:"voice_style"`
+	ImageURL        *string          `gorm:"type:varchar(500)" json:"image_url"`
+	Images          []CharacterImage `gorm:"foreignKey:CharacterID;constraint:OnDelete:CASCADE" json:"images,omitempty"`
+	ReferenceImages datatypes.JSON   `gorm:"type:json" json:"reference_images"`
+	SeedValue       *string          `gorm:"type:varchar(100)" json:"seed_value"`
+	SortOrder       int              `gorm:"default:0" json:"sort_order"`
+	CreatedAt       time.Time        `gorm:"not null;autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time        `gorm:"not null;autoUpdateTime" json:"updated_at"`
+	DeletedAt       gorm.DeletedAt   `gorm:"index" json:"-"`
 
 	// 多对多关系：角色可以属于多个章节
 	Episodes []Episode `gorm:"many2many:episode_characters;" json:"episodes,omitempty"`
@@ -136,6 +137,7 @@ type Scene struct {
 	Prompt          string         `gorm:"type:text;not null" json:"prompt"`
 	StoryboardCount int            `gorm:"default:1" json:"storyboard_count"`
 	ImageURL        *string        `gorm:"type:varchar(500)" json:"image_url"`
+	Images          []SceneImage   `gorm:"foreignKey:SceneID;constraint:OnDelete:CASCADE" json:"images,omitempty"`
 	Status          string         `gorm:"type:varchar(20);default:'pending'" json:"status"` // pending, generated, failed
 	CreatedAt       time.Time      `gorm:"not null;autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"not null;autoUpdateTime" json:"updated_at"`

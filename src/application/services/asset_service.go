@@ -7,22 +7,51 @@ import (
 
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
+	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
 
 type AssetService struct {
-	db     *gorm.DB
-	log    *logger.Logger
-	ffmpeg *ffmpeg.FFmpeg
+	db           *gorm.DB
+	log          *logger.Logger
+	ffmpeg       *ffmpeg.FFmpeg
+	localStorage *storage.LocalStorage
 }
 
-func NewAssetService(db *gorm.DB, log *logger.Logger) *AssetService {
+func NewAssetService(db *gorm.DB, log *logger.Logger, localStorage *storage.LocalStorage) *AssetService {
 	return &AssetService{
-		db:     db,
-		log:    log,
-		ffmpeg: ffmpeg.NewFFmpeg(log),
+		db:           db,
+		log:          log,
+		ffmpeg:       ffmpeg.NewFFmpeg(log),
+		localStorage: localStorage,
 	}
+}
+
+func (s *AssetService) ensurePermanentURL(url string, category string) string {
+	trimmed := strings.TrimSpace(url)
+	if trimmed == "" {
+		return url
+	}
+	if s.localStorage == nil {
+		return url
+	}
+	if s.localStorage.IsLocalURL(trimmed) {
+		return url
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		localURL, err := s.localStorage.DownloadFromURL(trimmed, category)
+		if err != nil {
+			errStr := err.Error()
+			if len(errStr) > 200 {
+				errStr = errStr[:200] + "..."
+			}
+			s.log.Warnw("Failed to persist asset URL to local storage", "error", errStr, "category", category)
+			return url
+		}
+		return localURL
+	}
+	return url
 }
 
 type CreateAssetRequest struct {
@@ -228,10 +257,11 @@ func (s *AssetService) ImportFromImageGen(imageGenID uint) (*models.Asset, error
 	}
 
 	dramaID := imageGen.DramaID
+	finalURL := s.ensurePermanentURL(*imageGen.ImageURL, "assets/images")
 	asset := &models.Asset{
 		Name:       fmt.Sprintf("Image_%d", imageGen.ID),
 		Type:       models.AssetTypeImage,
-		URL:        *imageGen.ImageURL,
+		URL:        finalURL,
 		DramaID:    &dramaID,
 		ImageGenID: &imageGenID,
 		Width:      imageGen.Width,

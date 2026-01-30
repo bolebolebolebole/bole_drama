@@ -203,6 +203,13 @@ interface ProviderConfig {
 const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
   text: [
     { id: 'openai', name: 'OpenAI', models: ['gpt-5.2', 'gemini-3-pro-preview'] },
+    {
+      id: 'volcengine',
+      name: '火山引擎(豆包)',
+      models: [
+        'doubao-seed-1-8-251228',
+      ]
+    },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
@@ -277,44 +284,33 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
   ]
 }
 
-// 当前可用的厂商列表（只显示有激活配置的）
+// 当前可用的厂商列表
+// 允许创建新厂商配置：这里不再限制为“已有激活配置的 provider”。
 const availableProviders = computed(() => {
-  // 获取当前service_type下所有激活的配置
-  const activeConfigs = configs.value.filter(
-    c => c.service_type === form.service_type && c.is_active
-  )
-  
-  // 提取所有激活配置的provider，去重
-  const activeProviderIds = new Set(activeConfigs.map(c => c.provider))
-  
-  // 从providerConfigs中筛选出有激活配置的provider
-  const allProviders = providerConfigs[form.service_type] || []
-  return allProviders.filter(p => activeProviderIds.has(p.id))
+  return providerConfigs[form.service_type] || []
 })
 
-// 当前可用的模型列表（从已激活的配置中获取）
+// 当前可用的模型列表
+// 以 providerConfigs 作为默认候选，同时并入当前已有配置中的模型（便于回显/复用）。
 const availableModels = computed(() => {
   if (!form.provider) return []
-  
-  // 从已激活的配置中提取该 provider 的所有模型
-  const activeConfigsForProvider = configs.value.filter(
-    c => c.provider === form.provider && 
-         c.service_type === form.service_type && 
-         c.is_active
-  )
-  
-  // 提取所有模型，去重
+
   const models = new Set<string>()
-  activeConfigsForProvider.forEach(config => {
-    const modelList = Array.isArray(config.model)
-      ? config.model
-      : (config.model ? [config.model] : [])
+
+  const preset = (providerConfigs[form.service_type] || []).find(p => p.id === form.provider)
+  ;(preset?.models || []).forEach(m => models.add(String(m).trim()))
+
+  const existingConfigs = configs.value.filter(
+    c => c.provider === form.provider && c.service_type === form.service_type
+  )
+  existingConfigs.forEach(config => {
+    const modelList = Array.isArray(config.model) ? config.model : (config.model ? [config.model] : [])
     modelList
       .map(m => String(m || '').trim())
       .filter(Boolean)
       .forEach(m => models.add(m))
   })
-  
+
   return Array.from(models)
 })
 
@@ -564,9 +560,14 @@ const handleProviderChange = () => {
   
   // 根据厂商自动设置默认 base_url
   if (form.provider === 'gemini' || form.provider === 'google') {
-    form.base_url = 'https://api.chatfire.site'
+    form.base_url = 'https://generativelanguage.googleapis.com'
+  } else if (form.provider === 'openai') {
+    form.base_url = 'https://api.openai.com/v1'
+  } else if (form.provider === 'volcengine' || form.provider === 'volces' || form.provider === 'doubao') {
+    // 火山方舟（OpenAI compatible）
+    form.base_url = 'https://ark.cn-beijing.volces.com/api/v3'
   } else {
-    // openai, chatfire 等其他厂商
+    // chatfire 等其他 OpenAI compatible
     form.base_url = 'https://api.chatfire.site/v1'
   }
   

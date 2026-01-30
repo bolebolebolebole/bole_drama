@@ -7,20 +7,49 @@ import (
 	"time"
 
 	models "github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
 
 type CharacterLibraryService struct {
-	db  *gorm.DB
-	log *logger.Logger
+	db           *gorm.DB
+	log          *logger.Logger
+	localStorage *storage.LocalStorage
 }
 
-func NewCharacterLibraryService(db *gorm.DB, log *logger.Logger) *CharacterLibraryService {
+func NewCharacterLibraryService(db *gorm.DB, log *logger.Logger, localStorage *storage.LocalStorage) *CharacterLibraryService {
 	return &CharacterLibraryService{
-		db:  db,
-		log: log,
+		db:           db,
+		log:          log,
+		localStorage: localStorage,
 	}
+}
+
+func (s *CharacterLibraryService) ensurePermanentImageURL(imageURL string, category string) string {
+	trimmed := strings.TrimSpace(imageURL)
+	if trimmed == "" {
+		return imageURL
+	}
+	if s.localStorage == nil {
+		return imageURL
+	}
+	if s.localStorage.IsLocalURL(trimmed) {
+		return imageURL
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		localURL, err := s.localStorage.DownloadFromURL(trimmed, category)
+		if err != nil {
+			errStr := err.Error()
+			if len(errStr) > 200 {
+				errStr = errStr[:200] + "..."
+			}
+			s.log.Warnw("Failed to persist image to local storage", "error", errStr, "category", category)
+			return imageURL
+		}
+		return localURL
+	}
+	return imageURL
 }
 
 type CreateLibraryItemRequest struct {
@@ -78,6 +107,16 @@ func (s *CharacterLibraryService) ListLibraryItems(query *CharacterLibraryQuery)
 		return nil, 0, err
 	}
 
+	// 兼容历史数据：库里可能保存了外部临时URL（如TOS签名URL），尝试转存到本地。
+	for i := range items {
+		orig := items[i].ImageURL
+		fixed := s.ensurePermanentImageURL(orig, "library/characters")
+		if fixed != orig {
+			items[i].ImageURL = fixed
+			_ = s.db.Model(&models.CharacterLibrary{}).Where("id = ?", items[i].ID).Update("image_url", fixed).Error
+		}
+	}
+
 	return items, total, nil
 }
 
@@ -88,10 +127,12 @@ func (s *CharacterLibraryService) CreateLibraryItem(req *CreateLibraryItemReques
 		sourceType = "generated"
 	}
 
+	imageURL := s.ensurePermanentImageURL(req.ImageURL, "library/characters")
+
 	item := &models.CharacterLibrary{
 		Name:        req.Name,
 		Category:    req.Category,
-		ImageURL:    req.ImageURL,
+		ImageURL:    imageURL,
 		Description: req.Description,
 		Tags:        req.Tags,
 		SourceType:  sourceType,
@@ -117,6 +158,14 @@ func (s *CharacterLibraryService) GetLibraryItem(itemID string) (*models.Charact
 		}
 		s.log.Errorw("Failed to get library item", "error", err)
 		return nil, err
+	}
+
+	// 兼容历史数据：尝试把外部临时URL转存为本地URL
+	orig := item.ImageURL
+	fixed := s.ensurePermanentImageURL(orig, "library/characters")
+	if fixed != orig {
+		item.ImageURL = fixed
+		_ = s.db.Model(&models.CharacterLibrary{}).Where("id = ?", item.ID).Update("image_url", fixed).Error
 	}
 
 	return &item, nil
@@ -233,10 +282,12 @@ func (s *CharacterLibraryService) AddCharacterToLibrary(characterID string, cate
 		return nil, fmt.Errorf("角色还没有形象图片")
 	}
 
+	imageURL := s.ensurePermanentImageURL(*character.ImageURL, "library/characters")
+
 	// 创建角色库项
 	charLibrary := &models.CharacterLibrary{
 		Name:        character.Name,
-		ImageURL:    *character.ImageURL,
+		ImageURL:    imageURL,
 		Description: character.Description,
 		SourceType:  "character",
 	}

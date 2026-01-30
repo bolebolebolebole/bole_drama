@@ -219,7 +219,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
       "action": "陈峥缓缓转身，目光与身后的李芳对视，李芳手握手电筒，光束在两人之间晃动，眼神中透露疑惑和警惕",
       "dialogue": "陈峥：\"我们被耍了，这里根本没有我们要找的东西。\" 李芳：\"现在怎么办？我们的时间不多了。\"",
       "result": "两人站在昏暗中陷入沉思，手电筒光束照在地面形成圆形光斑，背景传来微弱的金属摩擦声，气氛紧张凝重",
-      "atmosphere": "低调光线·暗部占画面70%，侧面硬光勾勒人物轮廓，冷暖光对比强烈，海风吹过产生呼啸声，营造紧迫感",
+      "atmosphere": "低调光线·暗部占画面70%%，侧面硬光勾勒人物轮廓，冷暖光对比强烈，海风吹过产生呼啸声，营造紧迫感",
       "emotion": "紧张感↑↑·警惕↑↑（悬置）",
       "duration": 7,
       "bgm_prompt": "紧张感逐渐升级的音效，低频持续音",
@@ -325,11 +325,12 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 - 包含感官细节：视觉、听觉、触觉、嗅觉
 - 描述光线、色彩、质感、动态
 - 为视频生成AI提供足够的画面构建信息
-- 避免抽象词汇，使用具象的视觉化描述`, systemPrompt, scriptLabel, scriptContent, taskLabel, taskInstruction, charListLabel, characterList, charConstraint, sceneListLabel, sceneList, sceneConstraint)
+	- 避免抽象词汇，使用具象的视觉化描述`, systemPrompt, scriptLabel, scriptContent, taskLabel, taskInstruction, charListLabel, characterList, charConstraint, sceneListLabel, sceneList, sceneConstraint, scriptContent)
 
 	// 调用AI服务生成（如果指定了模型则使用指定的模型）
-	// 设置较大的max_tokens以确保完整返回所有分镜的JSON
-	// 从16000增加到65536以支持更长的剧本生成
+	// 注意：OpenAI/兼容接口对 max_tokens 有上限（常见为 32768），超过会直接 400。
+	// 若输出仍可能过长，后续需要做分段/续写式生成。
+	storyboardMaxTokens := 32768
 	var text string
 	if model != "" {
 		s.log.Infow("Using specified model for storyboard generation", "model", model)
@@ -337,14 +338,14 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 		if getErr != nil {
 			s.log.Warnw("Failed to get client for specified model, using default", "model", model, "error", getErr)
 			var err error
-			text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(65536))
+			text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(storyboardMaxTokens))
 			if err != nil {
 				s.log.Errorw("Failed to generate storyboard", "error", err)
 				return nil, fmt.Errorf("生成分镜头失败: %w", err)
 			}
 		} else {
 			var err error
-			text, err = client.GenerateText(prompt, "", ai.WithMaxTokens(65536))
+			text, err = client.GenerateText(prompt, "", ai.WithMaxTokens(storyboardMaxTokens))
 			if err != nil {
 				s.log.Errorw("Failed to generate storyboard", "error", err)
 				return nil, fmt.Errorf("生成分镜头失败: %w", err)
@@ -352,7 +353,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 		}
 	} else {
 		var err error
-		text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(65536))
+		text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(storyboardMaxTokens))
 		if err != nil {
 			s.log.Errorw("Failed to generate storyboard", "error", err)
 			return nil, fmt.Errorf("生成分镜头失败: %w", err)

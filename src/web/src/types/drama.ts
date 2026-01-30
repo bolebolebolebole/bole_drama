@@ -37,8 +37,18 @@ export interface Character {
   seed_value?: string
   sort_order?: number
   image_url?: string
+  images?: CharacterImage[]
   image_generation_status?: string
   image_generation_error?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CharacterImage {
+  id: number
+  character_id: number
+  image_url: string
+  sort_order: number
   created_at: string
   updated_at: string
 }
@@ -105,10 +115,20 @@ export interface Scene {
   storyboard_number?: number
   storyboard_count?: number
   image_url?: string
+  images?: SceneImage[]
   video_url?: string
   status: string
   image_generation_status?: string
   image_generation_error?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SceneImage {
+  id: number
+  scene_id: number
+  image_url: string
+  sort_order: number
   created_at: string
   updated_at: string
 }

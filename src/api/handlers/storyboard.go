@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"fmt"
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"time"
 )
 
 type StoryboardHandler struct {
@@ -34,6 +36,16 @@ func (h *StoryboardHandler) GenerateStoryboard(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 如果没有提供body或者解析失败，使用空字符串（使用默认模型）
 		req.Model = ""
+	}
+
+	// 如果该集数已有进行中的分镜任务，复用它，避免重复发起（用户重复点击/刷新页面）
+	if existing, err := h.taskService.FindActiveTask("storyboard_generation", episodeID, 30*time.Minute); err == nil && existing != nil {
+		response.Success(c, gin.H{
+			"task_id": existing.ID,
+			"status":  existing.Status,
+			"message": existing.Message,
+		})
+		return
 	}
 
 	// 创建异步任务
@@ -64,8 +76,29 @@ func (h *StoryboardHandler) processStoryboardGeneration(taskID, episodeID, model
 		h.log.Errorw("Failed to update task status", "error", err)
 	}
 
+	// 心跳：长时间生成时刷新 updated_at，避免前端以为卡死
+	stopHeartbeat := make(chan struct{})
+	startedAt := time.Now()
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				elapsed := int(time.Since(startedAt).Seconds())
+				_ = h.taskService.UpdateTaskStatus(taskID, "processing", 20, fmt.Sprintf("生成分镜中...（已运行%d秒）", elapsed))
+			case <-stopHeartbeat:
+				return
+			}
+		}
+	}()
+
+	// 进入模型调用阶段
+	_ = h.taskService.UpdateTaskStatus(taskID, "processing", 20, "请求模型生成分镜...")
+
 	// 调用实际的生成逻辑
 	result, err := h.storyboardService.GenerateStoryboard(episodeID, model)
+	close(stopHeartbeat)
 	if err != nil {
 		h.log.Errorw("Failed to generate storyboard", "error", err, "task_id", taskID)
 		if updateErr := h.taskService.UpdateTaskError(taskID, err); updateErr != nil {
@@ -73,6 +106,8 @@ func (h *StoryboardHandler) processStoryboardGeneration(taskID, episodeID, model
 		}
 		return
 	}
+
+	_ = h.taskService.UpdateTaskStatus(taskID, "processing", 80, "解析并保存分镜...")
 
 	// 更新任务结果
 	if err := h.taskService.UpdateTaskResult(taskID, result); err != nil {

@@ -117,6 +117,10 @@ export const dramaAPI = {
     return request.post<{ message: string; image_generation: ImageGeneration }>('/scenes/generate-image', data)
   },
 
+  reextractScenePrompt(sceneId: number | string, data: { episode_id?: number; script_content?: string; model?: string }) {
+    return request.post<{ message: string; scene: any }>(`/scenes/${sceneId}/reextract-prompt`, data)
+  },
+
   deleteScene(sceneId: string) {
     return request.delete(`/scenes/${sceneId}`)
   },

@@ -221,8 +221,16 @@
                 </div>
                 
                 <div class="card-image-container">
-                  <div v-if="char.image_url" class="char-image">
-                    <el-image :src="char.image_url" fit="cover" />
+                  <div v-if="(char.images && char.images.length > 0) || char.image_url" class="char-image">
+                    <el-image
+                      :src="char.images?.[0]?.image_url || char.image_url"
+                      fit="cover"
+                      :preview-src-list="(char.images || []).map(img => img.image_url)"
+                      preview-teleported
+                    />
+                    <el-tag v-if="char.images && char.images.length > 1" size="small" type="info" class="image-count-badge">
+                      {{ char.images.length }} 张
+                    </el-tag>
                   </div>
                   <div v-else-if="char.image_generation_status === 'pending' || char.image_generation_status === 'processing' || generatingCharacterImages[char.id]" class="char-placeholder generating">
                     <el-icon :size="64" class="rotating"><Loading /></el-icon>
@@ -241,46 +249,55 @@
                 </div>
 
                 <div class="card-actions">
-                  <el-tooltip :content="$t('tooltip.editPrompt')" placement="top">
-                    <el-button 
-                      size="small" 
+                  <el-tooltip :content="$t('tooltip.editPrompt')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
                       @click="openPromptDialog(char, 'character')"
                       :icon="Edit"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('tooltip.aiGenerate')" placement="top">
-                    <el-button 
+                  <el-tooltip :content="$t('tooltip.aiGenerate')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
                       type="primary"
-                      size="small" 
+                      size="small"
                       @click="generateCharacterImage(char.id)"
                       :loading="generatingCharacterImages[char.id]"
                       :icon="MagicStick"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('tooltip.uploadImage')" placement="top">
-                    <el-button 
-                      size="small" 
-                      @click="uploadCharacterImage(char.id)"
-                      :icon="Upload"
+                  <el-tooltip :content="$t('tooltip.uploadImage')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="openImageManager(char.id, 'character')"
+                      :icon="Picture"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('tooltip.selectFromLibrary')" placement="top">
-                    <el-button 
-                      size="small" 
+                  <el-tooltip :content="$t('tooltip.selectFromLibrary')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
                       @click="selectFromLibrary(char.id)"
                       :icon="Picture"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('workflow.addToLibrary')" placement="top">
-                    <el-button 
-                      size="small" 
+                  <el-tooltip :content="$t('workflow.addToLibrary')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
                       @click="addToCharacterLibrary(char)"
                       :icon="FolderAdd"
                       :disabled="!char.image_url"
+                      circle
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="$t('tooltip.reextractPrompt')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="reextractCharacterPrompt(char)"
+                      :loading="reextractingCharacterPrompts[char.id]"
+                      :icon="Refresh"
                       circle
                     />
                   </el-tooltip>
@@ -344,8 +361,16 @@
                 </div>
 
                 <div class="card-image-container">
-                  <div v-if="scene.image_url" class="scene-image">
-                    <el-image :src="scene.image_url" fit="cover" />
+                  <div v-if="(scene.images && scene.images.length > 0) || scene.image_url" class="scene-image">
+                    <el-image
+                      :src="scene.images?.[0]?.image_url || scene.image_url"
+                      fit="cover"
+                      :preview-src-list="(scene.images || []).map(img => img.image_url)"
+                      preview-teleported
+                    />
+                    <el-tag v-if="scene.images && scene.images.length > 1" size="small" type="info" class="image-count-badge">
+                      {{ scene.images.length }} 张
+                    </el-tag>
                   </div>
                   <div v-else-if="scene.image_generation_status === 'pending' || scene.image_generation_status === 'processing' || generatingSceneImages[scene.id]" class="scene-placeholder generating">
                     <el-icon :size="64" class="rotating"><Loading /></el-icon>
@@ -364,29 +389,55 @@
                 </div>
 
                 <div class="card-actions">
-                  <el-tooltip :content="$t('tooltip.editPrompt')" placement="top">
-                    <el-button 
-                      size="small" 
+                  <el-tooltip :content="$t('tooltip.editPrompt')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
                       @click="openPromptDialog(scene, 'scene')"
                       :icon="Edit"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('tooltip.aiGenerate')" placement="top">
-                    <el-button 
+                  <el-tooltip :content="$t('tooltip.aiGenerate')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
                       type="primary"
-                      size="small" 
+                      size="small"
                       @click="generateSceneImage(scene.id)"
                       :loading="generatingSceneImages[scene.id]"
                       :icon="MagicStick"
                       circle
                     />
                   </el-tooltip>
-                  <el-tooltip :content="$t('tooltip.uploadImage')" placement="top">
-                    <el-button 
-                      size="small" 
-                      @click="uploadSceneImage(scene.id)"
-                      :icon="Upload"
+                  <el-tooltip :content="$t('tooltip.uploadImage')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="openImageManager(scene.id, 'scene')"
+                      :icon="Picture"
+                      circle
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="$t('tooltip.selectFromLibrary')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="selectSceneFromLibrary(scene)"
+                      :icon="Picture"
+                      circle
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="$t('workflow.addToSceneLibrary')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="addSceneToLibrary(scene)"
+                      :icon="FolderAdd"
+                      :disabled="!scene.image_url"
+                      circle
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="$t('tooltip.reextractPrompt')" placement="top" effect="dark" popper-class="ep-tooltip">
+                    <el-button
+                      size="small"
+                      @click="reextractScenePrompt(scene)"
+                      :loading="reextractingScenePrompts[scene.id]"
+                      :icon="Refresh"
                       circle
                     />
                   </el-tooltip>
@@ -696,20 +747,28 @@
     </el-dialog>
 
     <!-- 角色库选择对话框 -->
-    <el-dialog 
-      v-model="libraryDialogVisible" 
-:title="$t('workflow.selectFromLibrary')" 
+    <el-dialog
+      v-model="libraryDialogVisible"
+      :title="$t('workflow.selectFromLibrary')"
       width="800px"
     >
       <div class="library-grid">
-        <div 
-          v-for="item in libraryItems" 
-          :key="item.id" 
+        <div
+          v-for="item in libraryItems"
+          :key="item.id"
           class="library-item"
           @click="selectLibraryItem(item)"
         >
           <el-image :src="item.image_url" fit="cover" />
-          <div class="library-item-name">{{ item.name }}</div>
+          <el-button
+            class="library-item-delete"
+            type="danger"
+            :icon="Delete"
+            circle
+            size="small"
+            @click.stop="deleteLibraryItem(item)"
+          />
+          <div class="library-item-name">{{ item.name || item.location }}</div>
         </div>
       </div>
       <div v-if="libraryItems.length === 0" class="empty-library">
@@ -730,7 +789,7 @@
             <el-option 
               v-for="model in textModels" 
               :key="model.modelName" 
-              :label="model.modelName"
+              :label="`${model.modelName} (${model.configName})`"
               :value="model.modelName"
             />
           </el-select>
@@ -744,7 +803,7 @@
             <el-option 
               v-for="model in imageModels" 
               :key="model.modelName" 
-              :label="model.modelName"
+              :label="`${model.modelName} (${model.configName})`"
               :value="model.modelName"
             />
           </el-select>
@@ -760,33 +819,12 @@
       </template>
     </el-dialog>
 
-    <!-- 图片上传对话框 -->
-    <el-dialog 
-      v-model="uploadDialogVisible" 
-:title="$t('tooltip.uploadImage')" 
-      width="500px"
-    >
-      <el-upload
-        class="upload-area"
-        drag
-        :action="uploadAction"
-        :headers="uploadHeaders"
-        :on-success="handleUploadSuccess"
-        :on-error="handleUploadError"
-        :show-file-list="false"
-        accept="image/jpeg,image/png,image/jpg"
-      >
-        <el-icon class="el-icon--upload"><Upload /></el-icon>
-        <div class="el-upload__text">
-          {{ $t('workflow.dragFilesHere') }}<em>{{ $t('workflow.clickToUpload') }}</em>
-        </div>
-        <template #tip>
-          <div class="el-upload__tip">
-            {{ $t('workflow.uploadFormatTip') }}
-          </div>
-        </template>
-      </el-upload>
-    </el-dialog>
+    <ImageManagerDialog
+      v-model="imageManagerVisible"
+      :type="imageManagerType"
+      :entity-id="imageManagerEntityId"
+      @refresh="handleImageManagerRefresh"
+    />
     </div>
   </div>
 </template>
@@ -796,9 +834,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  User, 
-  Location, 
+import {
+  User,
+  Location,
   Picture,
   MagicStick,
   ArrowRight,
@@ -807,21 +845,23 @@ import {
   Film,
   Edit,
   More,
-  Upload,
   Delete,
   FolderAdd,
   Setting,
   Loading,
-  WarningFilled
+  WarningFilled,
+  Refresh
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { generationAPI } from '@/api/generation'
 import { characterLibraryAPI } from '@/api/character-library'
+import { sceneLibraryAPI } from '@/api/scene-library'
 import { aiAPI } from '@/api/ai'
 import type { AIServiceConfig } from '@/types/ai'
 import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
 import { AppHeader } from '@/components/common'
+import ImageManagerDialog from '@/components/ImageManagerDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -845,6 +885,8 @@ const batchGeneratingCharacters = ref(false)
 const batchGeneratingScenes = ref(false)
 const generatingCharacterImages = ref<Record<number, boolean>>({})
 const generatingSceneImages = ref<Record<string, boolean>>({})
+const reextractingCharacterPrompts = ref<Record<number, boolean>>({})
+const reextractingScenePrompts = ref<Record<string, boolean>>({})
 
 // 选择状态
 const selectedCharacterIds = ref<number[]>([])
@@ -855,17 +897,16 @@ const selectAllScenes = ref(false)
 // 对话框状态
 const promptDialogVisible = ref(false)
 const libraryDialogVisible = ref(false)
-const uploadDialogVisible = ref(false)
 const modelConfigDialogVisible = ref(false)
 const currentEditItem = ref<any>({ name: '' })
 const currentEditType = ref<'character' | 'scene'>('character')
 const editPrompt = ref('')
 const libraryItems = ref<any[]>([])
-const currentUploadTarget = ref<any>(null)
-const uploadAction = computed(() => '/api/v1/upload/image')
-const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${localStorage.getItem('token')}`
-}))
+const libraryMode = ref<'character' | 'scene'>('character')
+const libraryTarget = ref<{ id: number | string; type: 'character' | 'scene' } | null>(null)
+const imageManagerVisible = ref(false)
+const imageManagerType = ref<'character' | 'scene'>('character')
+const imageManagerEntityId = ref<string | number>(0)
 
 // AI模型配置
 interface ModelOption {
@@ -1260,6 +1301,9 @@ const extractCharactersAndBackgrounds = async () => {
         episode_id: episodeId,
         outline: currentEpisode.value.script_content || '',
         count: 0,
+        // Once a drama has any characters, re-extraction must not create new records.
+        // This prevents duplicates caused by naming variations (e.g., "苏遥遥（遥遥）" vs "苏遥（遥遥）").
+        allow_create: !(drama.value?.characters && drama.value.characters.length > 0),
         model: selectedTextModel.value  // 传递用户选择的文本模型
       }),
       dramaAPI.extractBackgrounds(episodeId.toString(), selectedTextModel.value)  // 传递用户选择的文本模型
@@ -1600,48 +1644,112 @@ const saveShotEdit = async () => {
 const openPromptDialog = (item: any, type: 'character' | 'scene') => {
   currentEditItem.value = item
   currentEditType.value = type
-  editPrompt.value = item.appearance || item.description || ''
+  editPrompt.value = type === 'scene'
+    ? (item.prompt || '')
+    : (item.appearance || item.description || '')
   promptDialogVisible.value = true
 }
 
 const savePrompt = async () => {
   try {
+    const itemId = Number(currentEditItem.value?.id)
+    if (!itemId) {
+      ElMessage.error('数据异常：缺少ID')
+      return
+    }
+
     if (currentEditType.value === 'character') {
-      await characterLibraryAPI.updateCharacter(currentEditItem.value.id, {
+      await characterLibraryAPI.updateCharacter(itemId, {
         appearance: editPrompt.value
       })
-      await generateCharacterImage(currentEditItem.value.id)
     } else {
-      await dramaAPI.generateSceneImage({ 
-        scene_id: Number(currentEditItem.value.id),
+      await dramaAPI.updateScene(String(itemId), {
         prompt: editPrompt.value
       })
     }
+
+    // 先关闭对话框，再后台生成，避免阻塞用户操作
     promptDialogVisible.value = false
+
+    if (currentEditType.value === 'character') {
+      void generateCharacterImage(itemId)
+    } else {
+      void generateSceneImage(itemId)
+    }
   } catch (error: any) {
     ElMessage.error(error.message || '保存失败')
   }
 }
 
-const uploadCharacterImage = (characterId: number) => {
-  currentUploadTarget.value = { id: characterId, type: 'character' }
-  uploadDialogVisible.value = true
-}
-
-const uploadSceneImage = (sceneId: number) => {
-  currentUploadTarget.value = { id: sceneId, type: 'scene' }
-  uploadDialogVisible.value = true
+const openImageManager = (id: string | number, type: 'character' | 'scene') => {
+  imageManagerEntityId.value = id
+  imageManagerType.value = type
+  imageManagerVisible.value = true
 }
 
 const selectFromLibrary = async (characterId: number) => {
   try {
     const result = await characterLibraryAPI.list({ page_size: 50 })
     libraryItems.value = result.items || []
-    currentUploadTarget.value = characterId
+    libraryTarget.value = { id: characterId, type: 'character' }
+    libraryMode.value = 'character'
     libraryDialogVisible.value = true
   } catch (error: any) {
     ElMessage.error(error.message || $t('workflow.loadLibraryFailed'))
   }
+}
+
+const deleteCharacterLibraryItem = async (item: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除角色库中的 "${item.name}" 吗？此操作不可恢复。`,
+      $t('common.tip'),
+      {
+        confirmButtonText: $t('common.confirm'),
+        cancelButtonText: $t('common.cancel'),
+        type: 'warning'
+      }
+    )
+
+    await characterLibraryAPI.delete(String(item.id))
+    const result = await characterLibraryAPI.list({ page_size: 50 })
+    libraryItems.value = result.items || []
+    ElMessage.success($t('message.deleteSuccess'))
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || $t('message.operationFailed'))
+    }
+  }
+}
+
+const deleteSceneLibraryItem = async (item: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除场景库中的 "${item.location || item.name}" 吗？此操作不可恢复。`,
+      $t('common.tip'),
+      {
+        confirmButtonText: $t('common.confirm'),
+        cancelButtonText: $t('common.cancel'),
+        type: 'warning'
+      }
+    )
+
+    await sceneLibraryAPI.delete(String(item.id))
+    const result = await sceneLibraryAPI.list({ page_size: 50 })
+    libraryItems.value = result.items || []
+    ElMessage.success($t('message.deleteSuccess'))
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || $t('message.operationFailed'))
+    }
+  }
+}
+
+const deleteLibraryItem = async (item: any) => {
+  if (libraryMode.value === 'scene') {
+    return deleteSceneLibraryItem(item)
+  }
+  return deleteCharacterLibraryItem(item)
 }
 
 const addToCharacterLibrary = async (character: any) => {
@@ -1649,7 +1757,7 @@ const addToCharacterLibrary = async (character: any) => {
     ElMessage.warning($t('workflow.generateImageFirst'))
     return
   }
-  
+
   try {
     await ElMessageBox.confirm(
       $t('workflow.addToLibraryConfirm', { name: character.name }),
@@ -1660,7 +1768,7 @@ const addToCharacterLibrary = async (character: any) => {
         type: 'info'
       }
     )
-    
+
     await characterLibraryAPI.addCharacterToLibrary(character.id.toString())
     ElMessage.success($t('workflow.addedToLibrary'))
   } catch (error: any) {
@@ -1670,14 +1778,64 @@ const addToCharacterLibrary = async (character: any) => {
   }
 }
 
+// Scene library functions
+const selectSceneFromLibrary = async (scene: any) => {
+  try {
+    const result = await sceneLibraryAPI.list({ page_size: 50 })
+    libraryItems.value = result.items || []
+    libraryTarget.value = { id: scene.id, type: 'scene' }
+    libraryMode.value = 'scene'
+    libraryDialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载场景库失败')
+  }
+}
+
+const addSceneToLibrary = async (scene: any) => {
+  if (!scene.image_url) {
+    ElMessage.warning($t('workflow.generateImageFirst'))
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要将场景"${scene.location}"添加到场景库吗？`,
+      '添加到场景库',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    )
+
+    await sceneLibraryAPI.addSceneToLibrary(String(scene.id))
+    ElMessage.success('场景已添加到场景库')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '添加失败')
+    }
+  }
+}
+
 const selectLibraryItem = async (item: any) => {
   try {
-    if (currentUploadTarget.value?.type === 'character') {
+    if (libraryMode.value === 'character' && libraryTarget.value?.type === 'character') {
       await characterLibraryAPI.applyFromLibrary(
-        currentUploadTarget.value.id.toString(),
-        item.id
+        libraryTarget.value.id.toString(),
+        String(item.id)
       )
       ElMessage.success('应用角色形象成功！')
+      await loadDramaData()
+      libraryDialogVisible.value = false
+      return
+    }
+
+    if (libraryMode.value === 'scene' && libraryTarget.value?.type === 'scene') {
+      await sceneLibraryAPI.applyFromLibrary(
+        String(libraryTarget.value.id),
+        String(item.id)
+      )
+      ElMessage.success('应用场景背景成功！')
       await loadDramaData()
       libraryDialogVisible.value = false
     }
@@ -1686,34 +1844,8 @@ const selectLibraryItem = async (item: any) => {
   }
 }
 
-const handleUploadSuccess = async (response: any) => {
-  try {
-    const imageUrl = response.url || response.data?.url
-    if (!imageUrl) {
-      ElMessage.error('上传失败：未获取到图片地址')
-      return
-    }
-
-    if (currentUploadTarget.value?.type === 'character') {
-      await characterLibraryAPI.uploadCharacterImage(
-        currentUploadTarget.value.id.toString(),
-        imageUrl
-      )
-      ElMessage.success('上传成功！')
-    } else if (currentUploadTarget.value?.type === 'scene') {
-      // TODO: 场景图片上传API
-      ElMessage.success('上传成功！')
-    }
-    
-    await loadDramaData()
-    uploadDialogVisible.value = false
-  } catch (error: any) {
-    ElMessage.error(error.message || '上传失败')
-  }
-}
-
-const handleUploadError = () => {
-  ElMessage.error('上传失败，请重试')
+const handleImageManagerRefresh = async () => {
+  await loadDramaData()
 }
 
 const deleteCharacter = async (characterId: number) => {
@@ -1735,6 +1867,86 @@ const deleteCharacter = async (characterId: number) => {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
     }
+  }
+}
+
+const reextractCharacterPrompt = async (character: any) => {
+  if (!character.id) {
+    ElMessage.error('角色信息不存在')
+    return
+  }
+
+  if (!currentEpisode.value?.id) {
+    ElMessage.error('章节信息不存在')
+    return
+  }
+
+  reextractingCharacterPrompts.value[character.id] = true
+
+  try {
+    await ElMessageBox.confirm(
+      `将基于当前章节剧本重新提取“${character.name}”的提示词（外貌/性格/背景等），并覆盖现有描述。\n\n此操作不会自动重新生成图片。是否继续？`,
+      '重新提取提示词',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await characterLibraryAPI.reextractCharacterPrompt(String(character.id), {
+      episode_id: Number(currentEpisode.value.id),
+      model: selectedTextModel.value
+    })
+
+    ElMessage.success('角色提示词已重新提取')
+    await loadDramaData()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '重新提取失败')
+    }
+  } finally {
+    reextractingCharacterPrompts.value[character.id] = false
+  }
+}
+
+const reextractScenePrompt = async (scene: any) => {
+  if (!scene.id) {
+    ElMessage.error('场景信息不存在')
+    return
+  }
+
+  if (!currentEpisode.value?.id) {
+    ElMessage.error('章节信息不存在')
+    return
+  }
+
+  reextractingScenePrompts.value[String(scene.id)] = true
+
+  try {
+    await ElMessageBox.confirm(
+      `将基于当前章节剧本重新提取该场景的提示词，并覆盖现有prompt。\n\n场景：${scene.location} · ${scene.time}\n\n此操作不会自动重新生成图片。是否继续？`,
+      '重新提取提示词',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await dramaAPI.reextractScenePrompt(String(scene.id), {
+      episode_id: Number(currentEpisode.value.id),
+      model: selectedTextModel.value
+    })
+
+    ElMessage.success('场景提示词已重新提取')
+    await loadDramaData()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '重新提取失败')
+    }
+  } finally {
+    reextractingScenePrompts.value[String(scene.id)] = false
   }
 }
 
@@ -1781,6 +1993,27 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+/* Element Plus tooltip is teleported to <body>, use global selector */
+:global(.ep-tooltip.el-popper),
+:global(.ep-tooltip.el-tooltip__popper) {
+  background: #303133 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+:global(.ep-tooltip.el-popper .el-popper__arrow::before),
+:global(.ep-tooltip.el-tooltip__popper .el-popper__arrow::before),
+:global(.ep-tooltip.el-tooltip__popper .el-tooltip__arrow::before) {
+  background: #303133 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+:global(.ep-tooltip.el-tooltip__popper.is-light) {
+  background: #303133 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
 /* ========================================
    Page Layout / 页面布局 - 紧凑边距
    ======================================== */
@@ -2241,16 +2474,30 @@ onMounted(() => {
     border-radius: 8px;
     overflow: hidden;
     transition: all 0.3s;
+    position: relative;
 
     &:hover {
       border-color: var(--accent);
       transform: translateY(-2px);
       box-shadow: var(--shadow-lg);
+
+      .library-item-delete {
+        opacity: 1;
+      }
     }
 
     .el-image {
       width: 100%;
       height: 150px;
+    }
+
+    .library-item-delete {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10;
     }
 
     .library-item-name {
@@ -2362,5 +2609,20 @@ onMounted(() => {
 :deep(.el-upload-dragger) {
   background: var(--bg-secondary);
   border-color: var(--border-primary);
+}
+
+.card-image-container {
+  position: relative;
+}
+
+.char-image,
+.scene-image {
+  position: relative;
+}
+
+.image-count-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 </style>

@@ -85,10 +85,14 @@ func (s *DramaService) CreateDrama(req *CreateDramaRequest) (*models.Drama, erro
 func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 	var drama models.Drama
 	err := s.db.Where("id = ? ", dramaID).
-		Preload("Characters").          // 加载Drama级别的角色
-		Preload("Scenes").              // 加载Drama级别的场景
-		Preload("Episodes.Characters"). // 加载每个章节关联的角色
-		Preload("Episodes.Scenes").     // 加载每个章节关联的场景
+		Preload("Characters.Images", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC, id ASC") }).
+		Preload("Characters").
+		Preload("Scenes.Images", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC, id ASC") }).
+		Preload("Scenes").
+		Preload("Episodes.Characters.Images", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC, id ASC") }).
+		Preload("Episodes.Characters").
+		Preload("Episodes.Scenes.Images", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC, id ASC") }).
+		Preload("Episodes.Scenes").
 		Preload("Episodes.Storyboards", func(db *gorm.DB) *gorm.DB {
 			return db.Order("storyboards.storyboard_number ASC")
 		}).
@@ -182,19 +186,39 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 		}
 	}
 
-	// 整合所有剧集的场景到Drama级别的Scenes字段
-	sceneMap := make(map[uint]*models.Scene) // 用于去重
+	// 整合所有剧集的角色/场景到Drama级别的字段（供前端编辑器作为素材使用）
+	// 注意：前端 ProfessionalEditor 主要读取 drama.characters / drama.scenes。
+	// 这里做 union，避免仅存在于 episode 关联中的数据在编辑器里“消失”。
+	characterMap := make(map[uint]*models.Character)
+	for i := range drama.Characters {
+		c := &drama.Characters[i]
+		characterMap[c.ID] = c
+	}
 	for i := range drama.Episodes {
-		for j := range drama.Episodes[i].Scenes {
-			scene := &drama.Episodes[i].Scenes[j]
-			sceneMap[scene.ID] = scene
+		for j := range drama.Episodes[i].Characters {
+			c := &drama.Episodes[i].Characters[j]
+			characterMap[c.ID] = c
 		}
 	}
+	drama.Characters = make([]models.Character, 0, len(characterMap))
+	for _, c := range characterMap {
+		drama.Characters = append(drama.Characters, *c)
+	}
 
-	// 将整合的场景添加到drama.Scenes
+	sceneMap := make(map[uint]*models.Scene)
+	for i := range drama.Scenes {
+		s := &drama.Scenes[i]
+		sceneMap[s.ID] = s
+	}
+	for i := range drama.Episodes {
+		for j := range drama.Episodes[i].Scenes {
+			s := &drama.Episodes[i].Scenes[j]
+			sceneMap[s.ID] = s
+		}
+	}
 	drama.Scenes = make([]models.Scene, 0, len(sceneMap))
-	for _, scene := range sceneMap {
-		drama.Scenes = append(drama.Scenes, *scene)
+	for _, s := range sceneMap {
+		drama.Scenes = append(drama.Scenes, *s)
 	}
 
 	return &drama, nil

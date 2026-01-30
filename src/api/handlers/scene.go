@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"errors"
+	"strconv"
+
+	"github.com/drama-generator/backend/infrastructure/storage"
 
 	services2 "github.com/drama-generator/backend/application/services"
 	models "github.com/drama-generator/backend/domain/models"
@@ -14,13 +17,99 @@ import (
 type SceneHandler struct {
 	db           *gorm.DB
 	sceneService *services2.StoryboardCompositionService
+	imageList    *services2.SceneImageService
 	log          *logger.Logger
 }
 
-func NewSceneHandler(db *gorm.DB, log *logger.Logger, imageGenService *services2.ImageGenerationService) *SceneHandler {
+func (h *SceneHandler) ListSceneImages(c *gin.Context) {
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := strconv.ParseUint(sceneIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的场景ID")
+		return
+	}
+	items, err := h.imageList.List(uint(sceneID))
+	if err != nil {
+		h.log.Errorw("Failed to list scene images", "error", err, "scene_id", sceneID)
+		response.InternalError(c, "获取失败")
+		return
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
+func (h *SceneHandler) AddSceneImage(c *gin.Context) {
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := strconv.ParseUint(sceneIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的场景ID")
+		return
+	}
+	var req struct {
+		ImageURL string `json:"image_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	item, err := h.imageList.Add(uint(sceneID), req.ImageURL)
+	if err != nil {
+		h.log.Errorw("Failed to add scene image", "error", err, "scene_id", sceneID)
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, item)
+}
+
+func (h *SceneHandler) ReorderSceneImages(c *gin.Context) {
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := strconv.ParseUint(sceneIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的场景ID")
+		return
+	}
+	var req struct {
+		ImageIDs []uint `json:"image_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.imageList.Reorder(uint(sceneID), req.ImageIDs); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"message": "ok"})
+}
+
+func (h *SceneHandler) DeleteSceneImage(c *gin.Context) {
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := strconv.ParseUint(sceneIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的场景ID")
+		return
+	}
+	imageIDStr := c.Param("image_id")
+	imageID, err := strconv.ParseUint(imageIDStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的图片ID")
+		return
+	}
+	if err := h.imageList.Delete(uint(sceneID), uint(imageID)); err != nil {
+		if err.Error() == "not found" {
+			response.NotFound(c, "图片不存在")
+			return
+		}
+		response.InternalError(c, "删除失败")
+		return
+	}
+	response.Success(c, gin.H{"message": "ok"})
+}
+
+func NewSceneHandler(db *gorm.DB, log *logger.Logger, imageGenService *services2.ImageGenerationService, localStorage *storage.LocalStorage) *SceneHandler {
 	return &SceneHandler{
 		db:           db,
 		sceneService: services2.NewStoryboardCompositionService(db, log, imageGenService),
+		imageList:    services2.NewSceneImageService(db, log, localStorage),
 		log:          log,
 	}
 }

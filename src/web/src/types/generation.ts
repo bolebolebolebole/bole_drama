@@ -5,6 +5,7 @@ export interface GenerateCharactersRequest {
   count?: number
   temperature?: number
   model?: string  // 指定使用的文本模型
+  allow_create?: boolean
 }
 
 export interface ParseScriptRequest {

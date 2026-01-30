@@ -75,7 +75,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Drama{},
 		&models.Episode{},
 		&models.Character{},
+		&models.CharacterImage{},
 		&models.Scene{},
+		&models.SceneImage{},
 		&models.Storyboard{},
 
 		// 生成相关
@@ -90,6 +92,7 @@ func AutoMigrate(db *gorm.DB) error {
 		// 资源管理
 		&models.Asset{},
 		&models.CharacterLibrary{},
+		&models.SceneLibrary{},
 
 		// 任务管理
 		&models.AsyncTask{},

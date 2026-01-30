@@ -2,7 +2,7 @@ import request from '../utils/request'
 import type { ImageGeneration } from '../types/image'
 
 export interface CharacterLibraryItem {
-  id: string
+  id: string | number
   name: string
   category?: string
   image_url: string
@@ -64,15 +64,31 @@ export const characterLibraryAPI = {
     return request.put(`/characters/${characterId}/image`, { image_url: imageUrl })
   },
 
+  // 角色多图管理
+  listImages(characterId: string | number) {
+    return request.get<{ items: Array<{ id: number; character_id: number; image_url: string; sort_order: number; created_at: string; updated_at: string }> }>(
+      `/characters/${characterId}/images`
+    )
+  },
+  addImage(characterId: string | number, imageUrl: string) {
+    return request.post(`/characters/${characterId}/images`, { image_url: imageUrl })
+  },
+  reorderImages(characterId: string | number, imageIds: number[]) {
+    return request.put(`/characters/${characterId}/images/reorder`, { image_ids: imageIds })
+  },
+  deleteImage(characterId: string | number, imageId: number) {
+    return request.delete(`/characters/${characterId}/images/${imageId}`)
+  },
+
   // 从角色库应用形象
-  applyFromLibrary(characterId: string, libraryItemId: string) {
+  applyFromLibrary(characterId: string | number, libraryItemId: string | number) {
     return request.put(`/characters/${characterId}/image-from-library`, {
-      library_item_id: libraryItemId
+      library_item_id: String(libraryItemId)
     })
   },
 
   // 将角色添加到角色库
-  addCharacterToLibrary(characterId: string, category?: string) {
+  addCharacterToLibrary(characterId: string | number, category?: string) {
     return request.post<CharacterLibraryItem>(`/characters/${characterId}/add-to-library`, {
       category
     })
@@ -102,6 +118,11 @@ export const characterLibraryAPI = {
     description?: string
   }) {
     return request.put(`/characters/${characterId}`, data)
+  },
+
+  // 重新从剧本中提取该角色的提示词/设定
+  reextractCharacterPrompt(characterId: string | number, data: { episode_id?: number; script_content?: string; model?: string }) {
+    return request.post<{ message: string; character: any }>(`/characters/${characterId}/reextract-prompt`, data)
   },
 
   // 删除角色

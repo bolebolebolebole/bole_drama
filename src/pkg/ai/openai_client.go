@@ -192,7 +192,17 @@ func WithTemperature(temp float64) func(*ChatCompletionRequest) {
 
 func WithMaxTokens(tokens int) func(*ChatCompletionRequest) {
 	return func(req *ChatCompletionRequest) {
-		req.MaxTokens = tokens
+		if tokens <= 0 {
+			return
+		}
+		// Some OpenAI-compatible providers enforce an upper bound for max_tokens.
+		// Clamp to a conservative hard limit to avoid 400 errors.
+		const hardLimit = 32768
+		t := tokens
+		if t > hardLimit {
+			t = hardLimit
+		}
+		req.MaxTokens = t
 	}
 }
 

@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/ai"
@@ -347,6 +348,7 @@ func (s *AIService) GetConfigForModel(serviceType string, modelName string) (*mo
 	for _, config := range configs {
 		for _, model := range config.Model {
 			if model == modelName {
+				s.log.Infow("Selected AI config for model", "service_type", serviceType, "model", modelName, "config_id", config.ID, "provider", config.Provider, "base_url", config.BaseURL, "priority", config.Priority)
 				return &config, nil
 			}
 		}
@@ -414,6 +416,60 @@ func (s *AIService) GetAIClientForModel(serviceType string, modelName string) (a
 		// openai, chatfire 等其他厂商都使用 OpenAI 格式
 		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, modelName, endpoint), nil
 	}
+}
+
+// EnsureVolcengineTextConfigForDoubao ensures that the Doubao text model routes to Volcengine (Ark)
+// when the user has an active volcengine image config but lacks a text config.
+// This prevents "doubao" model selection from accidentally using a chatfire text config.
+func (s *AIService) EnsureVolcengineTextConfigForDoubao() {
+	const doubaoTextModel = "doubao-seed-1-8-251228"
+
+	// If a volcengine/volces/doubao text config already exists for this model, do nothing.
+	var existing []models.AIServiceConfig
+	if err := s.db.Where("service_type = ? AND is_active = ?", "text", true).
+		Order("priority DESC, created_at DESC").
+		Find(&existing).Error; err == nil {
+		for _, cfg := range existing {
+			provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+			if provider != "volcengine" && provider != "volces" && provider != "doubao" {
+				continue
+			}
+			for _, m := range cfg.Model {
+				if strings.TrimSpace(m) == doubaoTextModel {
+					s.log.Infow("Volcengine text config for doubao already exists", "config_id", cfg.ID, "provider", cfg.Provider)
+					return
+				}
+			}
+		}
+	}
+
+	// Find an active volcengine image config as a source for base_url/api_key.
+	var imgCfg models.AIServiceConfig
+	if err := s.db.Where("service_type = ? AND is_active = ? AND (provider = ? OR provider = ? OR provider = ?)", "image", true, "volcengine", "volces", "doubao").
+		Order("priority DESC, created_at DESC").
+		First(&imgCfg).Error; err != nil {
+		// No volcengine image config; cannot auto-create.
+		return
+	}
+
+	newCfg := &models.AIServiceConfig{
+		ServiceType: "text",
+		Provider:    imgCfg.Provider,
+		Name:        "火山引擎-文本生成",
+		BaseURL:     imgCfg.BaseURL,
+		APIKey:      imgCfg.APIKey,
+		Model:       models.ModelField{doubaoTextModel},
+		Endpoint:    "/chat/completions",
+		Priority:    200,
+		IsActive:    true,
+	}
+
+	if err := s.db.Create(newCfg).Error; err != nil {
+		s.log.Warnw("Failed to auto-create volcengine text config", "error", err)
+		return
+	}
+
+	s.log.Infow("Auto-created volcengine text config for doubao", "config_id", newCfg.ID, "provider", newCfg.Provider, "base_url", newCfg.BaseURL, "model", doubaoTextModel)
 }
 
 func (s *AIService) GenerateText(prompt string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {

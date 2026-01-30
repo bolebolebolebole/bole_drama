@@ -6,6 +6,7 @@ import (
 
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
@@ -18,9 +19,9 @@ type AssetHandler struct {
 	log          *logger.Logger
 }
 
-func NewAssetHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger) *AssetHandler {
+func NewAssetHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, localStorage *storage.LocalStorage) *AssetHandler {
 	return &AssetHandler{
-		assetService: services.NewAssetService(db, log),
+		assetService: services.NewAssetService(db, log, localStorage),
 		log:          log,
 	}
 }

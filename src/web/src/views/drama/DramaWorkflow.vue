@@ -250,7 +250,11 @@
                     @change="toggleCharacterSelection(character.id)"
                   />
                   <div class="character-preview">
-                    <img v-if="character.image_url" :src="fixImageUrl(character.image_url)" :alt="character.name" />
+                    <img
+                      v-if="(character.images && character.images.length > 0) || character.image_url"
+                      :src="fixImageUrl(character.images?.[0]?.image_url || character.image_url)"
+                      :alt="character.name"
+                    />
                     <el-avatar v-else :size="120">{{ character.name[0] }}</el-avatar>
                   </div>
                   
@@ -296,10 +300,10 @@
                     </el-button>
                     <el-button 
                       size="small"
-                      @click="openUploadDialog(character)"
-                      :icon="UploadFilled"
+                      @click="openImageManager(character.id, 'character')"
+                      :icon="Picture"
                     >
-                      替换
+                      管理图片
                     </el-button>
                     <el-button 
                       size="small"
@@ -515,13 +519,23 @@
       <div class="library-grid" v-if="characterLibrary.length > 0">
         <el-row :gutter="16">
           <el-col :span="6" v-for="item in characterLibrary" :key="item.id">
-            <el-card 
-              shadow="hover" 
-              class="library-item" 
+            <el-card
+              shadow="hover"
+              class="library-item"
               @click="selectFromLibrary(item)"
               :body-style="{ padding: '10px' }"
             >
-              <img :src="fixImageUrl(item.image_url)" :alt="item.name" class="library-image" />
+              <div class="library-item-wrapper">
+                <img :src="fixImageUrl(item.image_url)" :alt="item.name" class="library-image" />
+                <el-button
+                  class="library-delete-btn"
+                  type="danger"
+                  :icon="Delete"
+                  circle
+                  size="small"
+                  @click.stop="deleteLibraryItem(item)"
+                />
+              </div>
               <div class="library-info">
                 <div class="library-name">{{ item.name }}</div>
                 <el-tag size="small">{{ item.category || '未分类' }}</el-tag>
@@ -532,6 +546,12 @@
       </div>
       <el-empty v-else description="角色库为空，生成形象后可添加到角色库" />
     </el-dialog>
+    <ImageManagerDialog
+      v-model="imageManagerVisible"
+      :type="imageManagerType"
+      :entity-id="imageManagerEntityId"
+      @refresh="handleImageManagerRefresh"
+    />
   </div>
 </template>
 
@@ -550,8 +570,6 @@ import {
   Edit,
   Document,
   ArrowDown,
-  Upload,
-  UploadFilled,
   FolderOpened,
   Plus,
   WarningFilled,
@@ -562,9 +580,9 @@ import {
 import { dramaAPI } from '@/api/drama'
 import { generationAPI } from '@/api/generation'
 import { characterLibraryAPI } from '@/api/character-library'
-import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
 import { AppHeader } from '@/components/common'
+import ImageManagerDialog from '@/components/ImageManagerDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -630,6 +648,10 @@ const newCharacter = ref({
   personality: '',
   description: ''
 })
+
+const imageManagerVisible = ref(false)
+const imageManagerType = ref<'character' | 'scene'>('character')
+const imageManagerEntityId = ref<string | number>(0)
 
 // 各阶段完成状态
 // 判断当前集是否已有剧本
@@ -1224,47 +1246,14 @@ const stopCharacterPolling = () => {
   selectAllCharacters.value = false
 }
 
-const openUploadDialog = (character: any) => {
-  selectedCharacter.value = character
-  
-  // 创建临时文件输入框
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/jpg'
-  
-  input.onchange = async (e: any) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    // 验证文件大小（10MB）
-    if (file.size > 10 * 1024 * 1024) {
-      ElMessage.error('图片大小不能超过10MB')
-      return
-    }
-    
-    try {
-      // 创建FormData上传文件
-      const formData = new FormData()
-      formData.append('file', file)
-      
-      ElMessage.info('正在上传图片...')
-      
-      // 上传到后端MinIO（后端会自动更新数据库）
-      await request.post<{ url: string }>(`/characters/${selectedCharacter.value.id}/upload-image`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
-      
-      ElMessage.success('图片上传成功')
-      await loadDramaData()
-    } catch (error: any) {
-      ElMessage.error(error.message || '上传失败')
-    }
-  }
-  
-  // 触发文件选择
-  input.click()
+const openImageManager = (id: string | number, type: 'character' | 'scene') => {
+  imageManagerEntityId.value = id
+  imageManagerType.value = type
+  imageManagerVisible.value = true
+}
+
+const handleImageManagerRefresh = async () => {
+  await loadDramaData()
 }
 
 const openCharacterLibrary = async (character: any) => {
@@ -1281,12 +1270,45 @@ const openCharacterLibrary = async (character: any) => {
 
 const selectFromLibrary = async (libraryItem: any) => {
   try {
-    await characterLibraryAPI.applyFromLibrary(selectedCharacter.value.id, libraryItem.id)
+    if (!selectedCharacter.value?.id) {
+      ElMessage.warning('请选择要应用形象的角色')
+      return
+    }
+
+    await characterLibraryAPI.applyFromLibrary(
+      String(selectedCharacter.value.id),
+      String(libraryItem.id)
+    )
     ElMessage.success('已应用角色库形象')
     libraryDialogVisible.value = false
     await loadDramaData()
   } catch (error: any) {
     ElMessage.error(error.message || '应用失败')
+  }
+}
+
+const deleteLibraryItem = async (item: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除角色库中的 "${item.name}" 吗？此操作不可恢复。`,
+      '删除角色库项目',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await characterLibraryAPI.delete(String(item.id))
+    ElMessage.success('已删除角色库项目')
+
+    // Refresh the library list
+    const res = await characterLibraryAPI.list({ page: 1, page_size: 100 })
+    characterLibrary.value = res.items || []
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '删除失败')
+    }
   }
 }
 
@@ -1860,6 +1882,36 @@ onMounted(() => {
   object-fit: cover;
   border-radius: 4px;
   margin-bottom: 8px;
+}
+
+.library-item-wrapper {
+  position: relative;
+}
+
+.library-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #fbc4c4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-item:hover .library-delete-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.library-delete-btn:hover {
+  background: #f56c6c;
+  border-color: #f56c6c;
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.4);
 }
 
 .library-info {

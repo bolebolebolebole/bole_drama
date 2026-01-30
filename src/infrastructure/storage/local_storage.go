@@ -58,6 +58,18 @@ func (s *LocalStorage) GetURL(path string) string {
 	return fmt.Sprintf("%s/%s", s.baseURL, path)
 }
 
+// IsLocalURL reports whether a URL is served by this LocalStorage base URL.
+// It also treats relative "/static/..." URLs as local.
+func (s *LocalStorage) IsLocalURL(url string) bool {
+	if url == "" {
+		return false
+	}
+	if strings.HasPrefix(url, "/static/") {
+		return true
+	}
+	return strings.HasPrefix(url, s.baseURL+"/") || url == s.baseURL
+}
+
 // DownloadFromURL 从远程URL下载文件到本地存储
 func (s *LocalStorage) DownloadFromURL(url, category string) (string, error) {
 	// 发送HTTP请求下载文件

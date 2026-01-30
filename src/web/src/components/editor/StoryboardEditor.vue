@@ -307,13 +307,37 @@
                />
              </div>
 
-             <div class="param-group">
-               <label>参考图片</label>
-               <ReferenceImageManager
-                 v-model="referenceImages"
-                 :max-images="5"
-               />
-             </div>
+              <div class="param-group">
+                <label>参考图片</label>
+                <div v-if="selectedCharacters.length > 0" class="character-reference-group">
+                  <div
+                    v-for="characterId in selectedCharacters"
+                    :key="characterId"
+                    class="character-reference-block"
+                  >
+                    <div class="character-reference-header">
+                      <span>{{ getCharacterById(characterId)?.name || '角色' }}</span>
+                    </div>
+                    <div v-if="getCharacterImages(characterId).length > 0" class="character-reference-images">
+                      <div
+                        v-for="(img, index) in getCharacterImages(characterId)"
+                        :key="img.id"
+                        class="character-reference-item"
+                        :class="{ disabled: !isCharacterImageEnabled(characterId, img.id) }"
+                        @click="toggleCharacterImage(characterId, img.id)"
+                      >
+                        <el-image :src="img.image_url" fit="cover" />
+                        <el-tag size="small" :type="isCharacterImageEnabled(characterId, img.id) ? 'success' : 'info'" class="reference-status">
+                          {{ isCharacterImageEnabled(characterId, img.id) ? '启用' : '禁用' }}
+                        </el-tag>
+                        <el-tag v-if="index === 0" size="small" type="success" class="reference-primary">默认</el-tag>
+                      </div>
+                    </div>
+                    <el-empty v-else description="暂无角色图片" :image-size="60" />
+                  </div>
+                </div>
+                <ReferenceImageManager v-model="referenceImages" :max-images="5" />
+              </div>
 
              <el-divider />
             
@@ -436,6 +460,7 @@ import {
   ArrowLeft
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
+import { characterLibraryAPI } from '@/api/character-library'
 import { videoAPI } from '@/api/video'
 import { useRouter } from 'vue-router'
 import { getVideoProxyUrl } from '@/utils/videoProxy'
@@ -494,6 +519,8 @@ const referenceImages = ref<string[]>([])
 const backgroundsCache = ref<Background[]>([])
 const videoPlayerRef = ref<HTMLVideoElement | null>(null)
 const videoPlaying = ref(false)
+const characterImagesMap = ref<Record<string, Array<{ id: number; image_url: string }>>>({})
+const enabledCharacterImages = ref<Record<string, number[]>>({})
 
 const toggleVideoPlay = () => {
   if (!videoPlayerRef.value) return
@@ -722,11 +749,16 @@ const handleGenerateBackground = async () => {
         ? parseInt(currentShot.value.background_id)
         : currentShot.value.background_id
 
+      const combinedReferences = Array.from(new Set([
+        ...referenceImages.value,
+        ...getEnabledCharacterImageUrls()
+      ]))
+
       await dramaAPI.generateSingleBackground(
         bgId,
         props.dramaId,
         backgroundPrompt.value,
-        referenceImages.value
+        combinedReferences
       )
     }
     
@@ -798,6 +830,55 @@ const handleUploadBackground = () => {
 
 const getCharacterById = (id: string) => {
   return availableCharacters.value.find(c => c.id === id)
+}
+
+const loadCharacterImages = async (characterId: string | number) => {
+  const key = String(characterId)
+  try {
+    const result = await characterLibraryAPI.listImages(key)
+    const items = result.items || []
+    characterImagesMap.value[key] = items
+    if (!enabledCharacterImages.value[key] && items.length > 0) {
+      enabledCharacterImages.value[key] = [items[0].id]
+    }
+  } catch (error) {
+    characterImagesMap.value[key] = []
+  }
+}
+
+const getCharacterImages = (characterId: string | number) => {
+  return characterImagesMap.value[String(characterId)] || []
+}
+
+const isCharacterImageEnabled = (characterId: string | number, imageId: number) => {
+  return (enabledCharacterImages.value[String(characterId)] || []).includes(imageId)
+}
+
+const toggleCharacterImage = (characterId: string | number, imageId: number) => {
+  const key = String(characterId)
+  const current = enabledCharacterImages.value[key] || []
+  if (current.includes(imageId)) {
+    if (current.length > 1) {
+      enabledCharacterImages.value[key] = current.filter(id => id !== imageId)
+    }
+    return
+  }
+  enabledCharacterImages.value[key] = [...current, imageId]
+}
+
+const getEnabledCharacterImageUrls = () => {
+  const urls: string[] = []
+  selectedCharacters.value.forEach(id => {
+    const key = String(id)
+    const images = getCharacterImages(key)
+    const enabledIds = enabledCharacterImages.value[key] || []
+    images.forEach(img => {
+      if (enabledIds.includes(img.id)) {
+        urls.push(img.image_url)
+      }
+    })
+  })
+  return urls
 }
 
 const handleComposeScene = async () => {
@@ -897,6 +978,22 @@ onMounted(async () => {
     }
   }
 })
+
+watch(selectedCharacters, (newIds) => {
+  const idSet = new Set(newIds.map(id => String(id)))
+  Object.keys(characterImagesMap.value).forEach(id => {
+    if (!idSet.has(id)) {
+      delete characterImagesMap.value[id]
+      delete enabledCharacterImages.value[id]
+    }
+  })
+  newIds.forEach(id => {
+    const key = String(id)
+    if (!characterImagesMap.value[key]) {
+      void loadCharacterImages(key)
+    }
+  })
+}, { immediate: true })
 
 // 监听镜头变化，自动选择相关角色和加载背景描述
 watch(() => currentShot.value, () => {
@@ -1648,5 +1745,67 @@ watch(() => currentShot.value, () => {
 
 :deep(.el-scrollbar__view) {
   height: 100%;
+}
+
+.character-reference-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.character-reference-block {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+}
+
+.character-reference-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.character-reference-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+}
+
+.character-reference-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.character-reference-item.disabled {
+  opacity: 0.5;
+}
+
+.character-reference-item .el-image {
+  width: 100%;
+  height: 100%;
+}
+
+.reference-status {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+}
+
+.reference-primary {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 </style>

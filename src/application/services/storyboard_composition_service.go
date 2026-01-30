@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	models "github.com/drama-generator/backend/domain/models"
@@ -103,6 +104,62 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 		charIDToInfo[characters[i].ID] = &characters[i]
 	}
 
+	// 角色图片兜底：
+	// 1) 优先使用 characters.image_url
+	// 2) 若为空，尝试从 image_generations（completed）里取最新一张
+	// 3) 若仍为空，按角色别名（例如“遥遥”）在同剧本中找有图的角色替代显示
+	charIDs := make([]uint, 0, len(characters))
+	for i := range characters {
+		charIDs = append(charIDs, characters[i].ID)
+	}
+
+	completedCharImageURL := make(map[uint]*string, len(characters))
+	if len(charIDs) > 0 {
+		var gens []models.ImageGeneration
+		if err := s.db.
+			Where("character_id IN ? AND status = ?", charIDs, models.ImageStatusCompleted).
+			Order("created_at DESC").
+			Find(&gens).Error; err != nil {
+			s.log.Warnw("Failed to load completed character image generations", "error", err)
+		} else {
+			for i := range gens {
+				g := &gens[i]
+				if g.CharacterID == nil || g.ImageURL == nil {
+					continue
+				}
+				if strings.TrimSpace(*g.ImageURL) == "" {
+					continue
+				}
+				if _, ok := completedCharImageURL[*g.CharacterID]; !ok {
+					completedCharImageURL[*g.CharacterID] = g.ImageURL
+				}
+			}
+		}
+	}
+
+	aliasToBestImage := make(map[string]*string, len(characters)*2)
+	for i := range characters {
+		c := &characters[i]
+		var url *string
+		if c.ImageURL != nil && strings.TrimSpace(*c.ImageURL) != "" {
+			url = c.ImageURL
+		} else if u, ok := completedCharImageURL[c.ID]; ok {
+			url = u
+		}
+		if url == nil {
+			continue
+		}
+		for _, alias := range buildCharacterAliases(c.Name) {
+			if alias == "" {
+				continue
+			}
+			// Keep first non-empty mapping to reduce random overrides.
+			if _, exists := aliasToBestImage[alias]; !exists {
+				aliasToBestImage[alias] = url
+			}
+		}
+	}
+
 	// 获取所有场景ID
 	var sceneIDs []uint
 	for _, storyboard := range storyboards {
@@ -119,6 +176,25 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 			for i := range scenes {
 				sceneMap[scenes[i].ID] = &scenes[i]
 			}
+		}
+	}
+
+	// 额外加载：同剧本下“已有图片”的场景，用于补全背景图（避免同地点重复场景导致素材缺失）
+	var dramaScenesWithImages []models.Scene
+	if err := s.db.
+		Where("drama_id = ? AND image_url IS NOT NULL AND image_url <> ''", episode.DramaID).
+		Find(&dramaScenesWithImages).Error; err != nil {
+		s.log.Warnw("Failed to load drama scenes with images", "error", err)
+	}
+	sceneKeyToImageURL := make(map[string]*string, len(dramaScenesWithImages))
+	for i := range dramaScenesWithImages {
+		sc := &dramaScenesWithImages[i]
+		if sc.ImageURL == nil || strings.TrimSpace(*sc.ImageURL) == "" {
+			continue
+		}
+		key := normalizeSceneKey(sc.Location, sc.Time)
+		if _, ok := sceneKeyToImageURL[key]; !ok {
+			sceneKeyToImageURL[key] = sc.ImageURL
 		}
 	}
 
@@ -210,10 +286,22 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 		// 直接使用关联的角色信息
 		if len(storyboard.Characters) > 0 {
 			for _, char := range storyboard.Characters {
+				img := char.ImageURL
+				if (img == nil || strings.TrimSpace(*img) == "") && completedCharImageURL[char.ID] != nil {
+					img = completedCharImageURL[char.ID]
+				}
+				if img == nil || strings.TrimSpace(*img) == "" {
+					for _, alias := range buildCharacterAliases(char.Name) {
+						if u, ok := aliasToBestImage[alias]; ok {
+							img = u
+							break
+						}
+					}
+				}
 				storyboardChar := SceneCharacterInfo{
 					ID:       char.ID,
 					Name:     char.Name,
-					ImageURL: char.ImageURL,
+					ImageURL: img,
 				}
 				storyboardInfo.Characters = append(storyboardInfo.Characters, storyboardChar)
 			}
@@ -222,12 +310,100 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 		// 添加场景信息
 		if storyboard.SceneID != nil {
 			if scene, ok := sceneMap[*storyboard.SceneID]; ok {
-				storyboardInfo.Background = &SceneBackgroundInfo{
+				bg := &SceneBackgroundInfo{
 					ID:       scene.ID,
 					Location: scene.Location,
 					Time:     scene.Time,
 					ImageURL: scene.ImageURL,
 					Status:   scene.Status,
+				}
+				// 如果该场景本身没有 image_url，则尝试使用同地点同时间的“已生成场景图”作为背景图
+				if (bg.ImageURL == nil || strings.TrimSpace(*bg.ImageURL) == "") && bg.Location != "" {
+					key := normalizeSceneKey(bg.Location, bg.Time)
+					if url, ok := sceneKeyToImageURL[key]; ok {
+						bg.ImageURL = url
+					} else {
+						// Fallback: loose match by location/time to any scene with images
+						bestScore := 0
+						var bestURL *string
+						for i := range dramaScenesWithImages {
+							sc := &dramaScenesWithImages[i]
+							score := sceneMatchScore(bg.Location, bg.Time, sc.Location, sc.Time)
+							if score > bestScore {
+								bestScore = score
+								bestURL = sc.ImageURL
+							}
+						}
+						if bestURL != nil {
+							bg.ImageURL = bestURL
+						}
+					}
+				}
+				storyboardInfo.Background = bg
+			}
+		} else {
+			// SceneID 为空时，尝试根据分镜 location/time 推断一个背景（仅用于编辑器显示与选图，不改变原分镜数据）
+			if storyboard.Location != nil {
+				sbLoc := strings.TrimSpace(*storyboard.Location)
+				sbTime := ""
+				if storyboard.Time != nil {
+					sbTime = strings.TrimSpace(*storyboard.Time)
+				}
+				bestScore := 0
+				var bestScene *models.Scene
+				for i := range dramaScenesWithImages {
+					sc := &dramaScenesWithImages[i]
+					score := sceneMatchScore(sbLoc, sbTime, sc.Location, sc.Time)
+					if score > bestScore {
+						bestScore = score
+						bestScene = sc
+					}
+				}
+				if bestScene != nil {
+					storyboardInfo.SceneID = &bestScene.ID
+					storyboardInfo.Background = &SceneBackgroundInfo{
+						ID:       bestScene.ID,
+						Location: bestScene.Location,
+						Time:     bestScene.Time,
+						ImageURL: bestScene.ImageURL,
+						Status:   bestScene.Status,
+					}
+				}
+			}
+		}
+
+		// 如果镜头没有角色关联，尝试从文本中推断（用于编辑器展示/参考图）
+		if len(storyboardInfo.Characters) == 0 {
+			aliasToID := make(map[string]uint, len(charIDToInfo)*2)
+			for id, c := range charIDToInfo {
+				for _, alias := range buildCharacterAliases(c.Name) {
+					aliasToID[alias] = id
+				}
+			}
+
+			var merged []uint
+			if storyboard.Action != nil {
+				merged = append(merged, inferCharacterIDsFromText(*storyboard.Action, aliasToID)...)
+			}
+			if storyboard.Dialogue != nil {
+				merged = append(merged, inferCharacterIDsFromText(*storyboard.Dialogue, aliasToID)...)
+			}
+			if storyboard.Description != nil {
+				merged = append(merged, inferCharacterIDsFromText(*storyboard.Description, aliasToID)...)
+			}
+			// Dedup and materialize
+			seen := make(map[uint]struct{}, len(merged))
+			for _, id := range merged {
+				if _, ok := seen[id]; ok {
+					continue
+				}
+				seen[id] = struct{}{}
+				if c, ok := charIDToInfo[id]; ok {
+					storyboardInfo.Characters = append(storyboardInfo.Characters, SceneCharacterInfo{
+						ID:       c.ID,
+						Name:     c.Name,
+						ImageURL: c.ImageURL,
+					})
 				}
 			}
 		}
@@ -375,6 +551,28 @@ func (s *StoryboardCompositionService) GenerateSceneImage(req *GenerateSceneImag
 			prompt = fmt.Sprintf("%s场景，%s", scene.Location, scene.Time)
 		}
 		s.log.Infow("Using scene prompt", "scene_id", req.SceneID, "prompt", prompt)
+	}
+
+	// 对齐角色图片逻辑：生成场景图也要参考项目风格
+	styleDesc := "写实风格"
+	if strings.TrimSpace(drama.Style) == "anime" {
+		styleDesc = "动漫风格"
+	}
+	trimmed := strings.TrimSpace(prompt)
+	if styleDesc != "" {
+		// 若提示词已包含另一种风格前缀，优先纠正为项目风格
+		if strings.HasPrefix(trimmed, "动漫风格") && styleDesc == "写实风格" {
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "动漫风格"))
+			trimmed = strings.TrimLeft(trimmed, "，,")
+			trimmed = styleDesc + "，" + strings.TrimSpace(trimmed)
+		} else if strings.HasPrefix(trimmed, "写实风格") && styleDesc == "动漫风格" {
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "写实风格"))
+			trimmed = strings.TrimLeft(trimmed, "，,")
+			trimmed = styleDesc + "，" + strings.TrimSpace(trimmed)
+		} else if !strings.HasPrefix(trimmed, styleDesc) {
+			trimmed = styleDesc + "，" + trimmed
+		}
+		prompt = trimmed
 	}
 
 	// 使用imageGen服务直接生成

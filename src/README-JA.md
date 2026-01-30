@@ -234,74 +234,6 @@ go run main.go
 ---
 
 ## 📦 デプロイ
-
-### 🐳 Docker デプロイ（推奨）
-
-#### 方法 1: Docker Compose（推奨）
-
-```bash
-# サービスを起動
-docker-compose up -d
-
-# ログを表示
-docker-compose logs -f
-
-# サービスを停止
-docker-compose down
-```
-
-#### 方法 2: Docker コマンド
-
-> **注意**: Linux ユーザーはホストサービスにアクセスするために `--add-host=host.docker.internal:host-gateway` を追加する必要があります
-
-```bash
-# Docker Hubから実行
-docker run -d \
-  --name huobao-drama \
-  -p 5678:5678 \
-  -v $(pwd)/data:/app/data \
-  --restart unless-stopped \
-  huobao/huobao-drama:latest
-
-# ログを表示
-docker logs -f huobao-drama
-```
-
-**ローカルビルド**（オプション）：
-
-```bash
-docker build -t huobao-drama:latest .
-docker run -d --name huobao-drama -p 5678:5678 -v $(pwd)/data:/app/data huobao-drama:latest
-```
-
-**Docker デプロイの利点：**
-
-- ✅ デフォルト設定ですぐに使用可能
-- ✅ 環境の一貫性、依存関係の問題を回避
-- ✅ ワンクリック起動、Go、Node.js、FFmpeg のインストール不要
-- ✅ 移行とスケーリングが容易
-- ✅ 自動ヘルスチェックと再起動
-- ✅ ファイル権限の自動処理
-
-#### 🔗 ホストサービスへのアクセス（Ollama/ローカルモデル）
-
-コンテナは `http://host.docker.internal:ポート番号` を使用してホストサービスにアクセスするよう設定されています。
-
-**設定手順：**
-
-1. **ホストでサービスを起動（全インターフェースでリッスン）**
-
-   ```bash
-   export OLLAMA_HOST=0.0.0.0:11434 && ollama serve
-   ```
-
-2. **フロントエンド AI サービス設定**
-   - Base URL: `http://host.docker.internal:11434/v1`
-   - Provider: `openai`
-   - Model: `qwen2.5:latest`
-
----
-
 ### 🏭 従来のデプロイ方法
 
 #### 1. ビルド
@@ -481,15 +413,6 @@ server {
 
 ## 📝 よくある質問
 
-### Q: Docker コンテナからホストの Ollama にアクセスするには？
-
-A: Base URL として `http://host.docker.internal:11434/v1` を使用します。注意点：
-
-1. ホストの Ollama は `0.0.0.0` でリッスンする必要があります: `export OLLAMA_HOST=0.0.0.0:11434 && ollama serve`
-2. `docker run` を使用する Linux ユーザーは追加が必要: `--add-host=host.docker.internal:host-gateway`
-
-詳細: [DOCKER_HOST_ACCESS.md](docs/DOCKER_HOST_ACCESS.md)
-
 ### Q: FFmpeg がインストールされていない、または見つからない？
 
 A: FFmpeg がインストールされ、PATH 環境変数に含まれていることを確認してください。`ffmpeg -version` で確認。
@@ -512,7 +435,6 @@ A: GORM は初回起動時にテーブルを自動作成します。ログでマ
 
 - 純粋な Go SQLite ドライバー（`modernc.org/sqlite`）、`CGO_ENABLED=0` クロスプラットフォームコンパイルをサポート
 - 並行性能を最適化（WAL モード）、"database is locked" エラーを解決
-- ホストサービスへのアクセス用 `host.docker.internal` の Docker クロスプラットフォームサポート
 - ドキュメントとデプロイガイドの簡素化
 
 ### v1.0.1 (2026-01-14)
