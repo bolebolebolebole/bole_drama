@@ -524,6 +524,99 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 				"image_url", truncateImageURL(finalImageURL))
 		}
 	}
+
+	// 同步写入多图表，确保前端优先展示 images[0] 时能刷新。
+	// 约定：对角色/场景生成的图片，追加到列表并置顶为主图。
+	if finalImageURL != "" {
+		if imageGen.CharacterID != nil && imageGen.ImageType == string(models.ImageTypeCharacter) {
+			characterID := *imageGen.CharacterID
+			imageList := NewCharacterImageService(s.db, s.log, s.localStorage)
+			existing, err := imageList.List(characterID)
+			if err != nil {
+				s.log.Warnw("Failed to list character images for syncing", "error", err, "character_id", characterID)
+			} else {
+				// If the URL already exists, just promote it to primary.
+				var existingID uint
+				for _, item := range existing {
+					if strings.TrimSpace(item.ImageURL) == strings.TrimSpace(finalImageURL) {
+						existingID = item.ID
+						break
+					}
+				}
+
+				if existingID != 0 {
+					order := make([]uint, 0, len(existing))
+					order = append(order, existingID)
+					for _, item := range existing {
+						if item.ID != existingID {
+							order = append(order, item.ID)
+						}
+					}
+					if err := imageList.Reorder(characterID, order); err != nil {
+						s.log.Warnw("Failed to promote existing character image", "error", err, "character_id", characterID, "image_id", existingID)
+					}
+				} else {
+					newItem, err := imageList.Add(characterID, finalImageURL)
+					if err != nil {
+						s.log.Warnw("Failed to add generated character image to list", "error", err, "character_id", characterID)
+					} else {
+						order := make([]uint, 0, len(existing)+1)
+						order = append(order, newItem.ID)
+						for _, item := range existing {
+							order = append(order, item.ID)
+						}
+						if err := imageList.Reorder(characterID, order); err != nil {
+							s.log.Warnw("Failed to promote generated character image", "error", err, "character_id", characterID, "image_id", newItem.ID)
+						}
+					}
+				}
+			}
+		}
+
+		if imageGen.SceneID != nil && imageGen.ImageType == string(models.ImageTypeScene) {
+			sceneID := *imageGen.SceneID
+			imageList := NewSceneImageService(s.db, s.log, s.localStorage)
+			existing, err := imageList.List(sceneID)
+			if err != nil {
+				s.log.Warnw("Failed to list scene images for syncing", "error", err, "scene_id", sceneID)
+			} else {
+				var existingID uint
+				for _, item := range existing {
+					if strings.TrimSpace(item.ImageURL) == strings.TrimSpace(finalImageURL) {
+						existingID = item.ID
+						break
+					}
+				}
+
+				if existingID != 0 {
+					order := make([]uint, 0, len(existing))
+					order = append(order, existingID)
+					for _, item := range existing {
+						if item.ID != existingID {
+							order = append(order, item.ID)
+						}
+					}
+					if err := imageList.Reorder(sceneID, order); err != nil {
+						s.log.Warnw("Failed to promote existing scene image", "error", err, "scene_id", sceneID, "image_id", existingID)
+					}
+				} else {
+					newItem, err := imageList.Add(sceneID, finalImageURL)
+					if err != nil {
+						s.log.Warnw("Failed to add generated scene image to list", "error", err, "scene_id", sceneID)
+					} else {
+						order := make([]uint, 0, len(existing)+1)
+						order = append(order, newItem.ID)
+						for _, item := range existing {
+							order = append(order, item.ID)
+						}
+						if err := imageList.Reorder(sceneID, order); err != nil {
+							s.log.Warnw("Failed to promote generated scene image", "error", err, "scene_id", sceneID, "image_id", newItem.ID)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func (s *ImageGenerationService) updateImageGenError(imageGenID uint, errorMsg string) {
