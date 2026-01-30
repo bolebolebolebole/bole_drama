@@ -16,8 +16,8 @@
           :show-file-list="false"
           accept="image/jpeg,image/png,image/jpg,image/webp"
         >
-          <el-button type="primary" :icon="Upload" :loading="uploading">
-            {{ uploading ? '上传中...' : '上传图片' }}
+          <el-button type="primary" :icon="Plus" :loading="uploading">
+            {{ uploading ? '上传中...' : '新增图片' }}
           </el-button>
         </el-upload>
         <span class="image-count">{{ images.length }} 张图片</span>
@@ -66,7 +66,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, ArrowUp, ArrowDown, Delete } from '@element-plus/icons-vue'
+import { Plus, ArrowUp, ArrowDown, Delete } from '@element-plus/icons-vue'
 import { characterLibraryAPI } from '@/api/character-library'
 import { sceneLibraryAPI } from '@/api/scene-library'
 

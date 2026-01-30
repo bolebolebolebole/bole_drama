@@ -271,7 +271,7 @@
                     <el-button
                       size="small"
                       @click="openImageManager(char.id, 'character')"
-                      :icon="Picture"
+                      :icon="Plus"
                       circle
                     />
                   </el-tooltip>
@@ -411,7 +411,7 @@
                     <el-button
                       size="small"
                       @click="openImageManager(scene.id, 'scene')"
-                      :icon="Picture"
+                      :icon="Plus"
                       circle
                     />
                   </el-tooltip>
@@ -850,7 +850,8 @@ import {
   Setting,
   Loading,
   WarningFilled,
-  Refresh
+  Refresh,
+  Plus
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { generationAPI } from '@/api/generation'
